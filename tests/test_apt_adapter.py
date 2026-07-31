@@ -86,3 +86,33 @@ def test_remove_uses_privileged_apt_get(monkeypatch):
     assert AptAdapter().remove("vlc") is True
 
     assert calls == [["sudo", "apt-get", "-y", "remove", "vlc"]]
+
+
+def test_outdated_parses_upgradable_list(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.apt_adapter", ["apt-get", "apt-cache", "dpkg-query"])
+    patch_dpkg_status(monkeypatch, "ins.adapters.apt_adapter", present=True)
+    calls = patch_runner(monkeypatch, "ins.adapters.apt_adapter", apt_routes())
+
+    outdated = AptAdapter().outdated()
+
+    assert calls[0][:3] == ["apt", "list", "--upgradable"]
+    by_id = {i.id: i for i in outdated}
+    assert set(by_id) == {"vlc", "git"}
+    assert by_id["vlc"].version == "3.0.20-0+deb12u1"
+    assert by_id["vlc"].available == "3.0.21-1"
+    assert by_id["git"].available == "1:2.43.0-1"
+    assert all(i.installed for i in outdated)
+
+
+def test_upgrade_uses_privileged_apt_get_only_upgrade(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.apt_adapter", ["apt-get", "apt-cache", "dpkg-query"])
+    patch_dpkg_status(monkeypatch, "ins.adapters.apt_adapter", present=True)
+    calls = patch_runner(monkeypatch, "ins.adapters.apt_adapter", apt_routes())
+    monkeypatch.setattr(
+        "ins.adapters._subprocess.shutil.which",
+        lambda name: "/usr/bin/sudo" if name == "sudo" else None,
+    )
+
+    assert AptAdapter().upgrade("vlc") is True
+
+    assert calls == [["sudo", "apt-get", "-y", "install", "--only-upgrade", "vlc"]]

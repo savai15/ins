@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 
 from ins.adapters._subprocess import CommandFailed, run, run_privileged, run_privileged_stream, split_name_version
@@ -9,6 +10,8 @@ from ins.adapters.base import SourceAdapter
 from ins.models import AppInfo
 
 _SEARCH_TIMEOUT = 60.0
+
+_UPGRADING_RE = re.compile(r"Upgrading (\S+) \(.*? -> (\S+)\)")
 
 
 class ApkAdapter(SourceAdapter):
@@ -84,6 +87,35 @@ class ApkAdapter(SourceAdapter):
 
     def remove(self, package_id: str, on_progress=None) -> bool:
         cmd = ["apk", "del", package_id]
+        if on_progress is not None:
+            run_privileged_stream(cmd, on_progress, timeout=600)
+        else:
+            run_privileged(cmd, timeout=600)
+        return True
+
+    # ---------------------------------------------------------- outdated/upgrade
+
+    def outdated(self) -> list[AppInfo]:
+        proc = run(["apk", "upgrade", "-s"], timeout=_SEARCH_TIMEOUT, check=False)
+        out: list[AppInfo] = []
+        for line in proc.stdout.splitlines():
+            match = _UPGRADING_RE.search(line)
+            if not match:
+                continue
+            out.append(
+                AppInfo(
+                    id=match.group(1),
+                    name=match.group(1),
+                    source=self.name,
+                    version="",
+                    available=match.group(2),
+                    installed=True,
+                )
+            )
+        return out
+
+    def upgrade(self, package_id: str, on_progress=None) -> bool:
+        cmd = ["apk", "add", "-u", package_id]
         if on_progress is not None:
             run_privileged_stream(cmd, on_progress, timeout=600)
         else:

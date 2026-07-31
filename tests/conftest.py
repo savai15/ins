@@ -104,6 +104,7 @@ def apt_routes() -> list[tuple[list[str], int, str, str]]:
         (["apt-cache", "search", "--names-only"], 0, output_samples.APT_CACHE_SEARCH, ""),
         (["apt-cache", "show"], 0, output_samples.APT_CACHE_SHOW, ""),
         (["dpkg-query", "-W"], 0, output_samples.DPKG_QUERY_W, ""),
+        (["apt", "list", "--upgradable"], 0, output_samples.APT_LIST_UPGRADABLE, ""),
         (["apt-get"], 0, "", ""),
     ]
 
@@ -114,6 +115,8 @@ def flatpak_routes() -> list[tuple[list[str], int, str, str]]:
         (["flatpak", "search", "--columns=application,remotes"], 0, output_samples.FLATPAK_SEARCH_REMOTES, ""),
         (["flatpak", "list", "--user"], 0, output_samples.FLATPAK_LIST_USER, ""),
         (["flatpak", "list", "--system"], 0, output_samples.FLATPAK_LIST_SYSTEM, ""),
+        (["flatpak", "remote-ls"], 0, output_samples.FLATPAK_REMOTE_LS_UPDATES, ""),
+        (["flatpak", "update"], 0, "", ""),
         (["flatpak", "install"], 0, "", ""),
         (["flatpak", "uninstall"], 0, "", ""),
     ]

@@ -92,3 +92,27 @@ def test_remove(monkeypatch):
 def test_human_name():
     assert _human_name("org.videolan.VLC") == "VLC"
     assert _human_name("org.mozilla.firefox") == "firefox"
+
+
+def test_outdated_parses_remote_ls_updates(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.flatpak_adapter", ["flatpak"])
+    calls = patch_runner(monkeypatch, "ins.adapters.flatpak_adapter", flatpak_routes())
+
+    outdated = FlatpakAdapter().outdated()
+
+    assert calls[0][1:] == ["remote-ls", "--updates", "--columns=application,version"]
+    by_id = {i.id: i for i in outdated}
+    assert set(by_id) == {"org.videolan.VLC", "org.mozilla.firefox"}
+    assert by_id["org.videolan.VLC"].name == "VLC"
+    assert by_id["org.videolan.VLC"].available == "3.0.21"
+    assert by_id["org.mozilla.firefox"].available == "131.0"
+    assert all(i.installed for i in outdated)
+
+
+def test_upgrade_is_user_level(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.flatpak_adapter", ["flatpak"])
+    calls = patch_runner(monkeypatch, "ins.adapters.flatpak_adapter", flatpak_routes())
+
+    assert FlatpakAdapter().upgrade("org.videolan.VLC") is True
+
+    assert calls == [["flatpak", "update", "--user", "-y", "org.videolan.VLC"]]

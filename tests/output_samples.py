@@ -1,14 +1,14 @@
 """Realistic captured output from Linux package managers, used as parse fixtures.
 
 Formats mirror actual tools with LC_ALL=C set:
-- apt-cache show/search, dpkg-query -W
-- flatpak search/list (columns=...)
-- dnf search -q
-- pacman -Ss / -Q
-- zypper -q search
+- apt-cache show/search, dpkg-query -W, apt list --upgradable
+- flatpak search/list (columns=...), flatpak remote-ls --updates
+- dnf search -q, dnf list --upgrades
+- pacman -Ss / -Q / -Qu
+- zypper -q search / list-updates
 - nix search nixpkgs / nix-env -q
-- apk search -d / apk info -v
-- snap find --color=never / snap list / snap refresh
+- apk search -d / apk info -v / apk upgrade -s
+- snap find --color=never / snap list / snap refresh / snap refresh --list
 """
 
 APT_CACHE_SHOW = """\
@@ -139,10 +139,49 @@ vlc - VideoLAN Client (new version)
 vlc-qt - Qt bindings for VLC
 """
 
+APK_UPGRADE_S = """\
+(1/2) Upgrading vlc (3.0.20-r0 -> 3.0.21-r0)
+(2/2) Upgrading zlib (1.3.1-r1 -> 1.3.1-r2)
+"""
+
 APK_INFO_V = """\
 musl-1.2.5-r0
 vlc-3.0.20-r0
 zlib-1.3.1-r1
+"""
+
+APT_LIST_UPGRADABLE = """\
+vlc/now 3.0.20-0+deb12u1 amd64 [upgradable to: 3.0.21-1]
+git/now 1:2.39.2-1.1 amd64 [upgradable to: 1:2.43.0-1]
+"""
+
+FLATPAK_REMOTE_LS_UPDATES = """\
+org.videolan.VLC\t3.0.21
+org.mozilla.firefox\t131.0
+"""
+
+DNF_LIST_UPGRADES = """\
+vlc.x86_64  3.0.21-1.fc40  fedora
+zlib.x86_64  1.3.1-2.fc40  fedora
+"""
+
+PACMAN_QU = """\
+vlc 3.0.20-2 -> 3.0.21-1
+firefox 130.0-1 -> 131.0-1
+zlib 1:1.3.1-1
+"""
+
+ZYPPER_LIST_UPDATES = """\
+S | Repository | Name    | Current Version | Repository | Installed    | Available
+--+------------+---------+-----------------+------------+--------------+----------
+v | repo-oss   | vlc     | 3.0.20-1.1      | repo-oss   | 3.0.20-1.1   | 3.0.21-1.1
+i | repo-oss   | firefox | 131.0-1.1       | repo-oss   | 131.0-1.1    | 131.0-1.1
+"""
+
+SNAP_REFRESH_LIST = """\
+Name    Version  Rev  Publisher   Notes
+vlc     3.0.21   11   videolan✓   -
+firefox  131.0    6    mozilla✓    -
 """
 
 SNAP_FIND = """\

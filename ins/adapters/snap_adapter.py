@@ -119,6 +119,39 @@ class SnapAdapter(SourceAdapter):
             lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
         return sum(1 for ln in lines if "All snaps up to date" not in ln)
 
+    # ---------------------------------------------------------- outdated/upgrade
+
+    def outdated(self) -> list[AppInfo]:
+        proc = run(["snap", "refresh", "--list"], timeout=_SEARCH_TIMEOUT, check=False)
+        if proc.returncode != 0 or "All snaps up to date" in proc.stdout:
+            return []
+        out: list[AppInfo] = []
+        for line in proc.stdout.splitlines():
+            if not line.strip() or line.lstrip().startswith("Name"):
+                continue
+            cols = _split_columns(line)
+            if len(cols) < 2:
+                continue
+            out.append(
+                AppInfo(
+                    id=cols[0],
+                    name=cols[0],
+                    source=self.name,
+                    version="",
+                    available=cols[1],
+                    installed=True,
+                )
+            )
+        return out
+
+    def upgrade(self, package_id: str, on_progress=None) -> bool:
+        cmd = ["snap", "refresh", package_id]
+        if on_progress is not None:
+            run_privileged_stream(cmd, on_progress, timeout=600)
+        else:
+            run_privileged(cmd, timeout=600)
+        return True
+
     # ------------------------------------------------------------------- info
 
     def info(self, package_id: str) -> dict[str, str] | None:

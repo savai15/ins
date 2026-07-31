@@ -118,3 +118,33 @@ def test_update_streams_progress(snap_env):
     seen: list[str] = []
     assert SnapAdapter().update(on_progress=seen.append) == 2
     assert seen == ["vlc 3.0.20 3.1.0 10 from snap-store", "firefox 130.0 131.0 5 from snap-store"]
+
+
+def test_outdated_parses_refresh_list(snap_env):
+    routes = [(["snap", "refresh", "--list"], 0, output_samples.SNAP_REFRESH_LIST, "")]
+    calls = patch_runner(snap_env, "ins.adapters.snap_adapter", routes)
+
+    outdated = SnapAdapter().outdated()
+
+    assert calls[0] == ["snap", "refresh", "--list"]
+    by_id = {i.id: i for i in outdated}
+    assert set(by_id) == {"vlc", "firefox"}
+    assert by_id["vlc"].available == "3.0.21"
+    assert by_id["firefox"].available == "131.0"
+    assert all(i.installed for i in outdated)
+
+
+def test_outdated_all_up_to_date_returns_empty(snap_env):
+    routes = [(["snap", "refresh", "--list"], 0, output_samples.SNAP_REFRESH_NONE, "")]
+    patch_runner(snap_env, "ins.adapters.snap_adapter", routes)
+
+    assert SnapAdapter().outdated() == []
+
+
+def test_upgrade_privileged(snap_env):
+    routes = [(["snap", "refresh", "vlc"], 0, "", "")]
+    calls = patch_runner(snap_env, "ins.adapters.snap_adapter", routes)
+
+    assert SnapAdapter().upgrade("vlc") is True
+    assert calls[0][0] in ("sudo", "pkexec")
+    assert calls[0][1:] == ["snap", "refresh", "vlc"]

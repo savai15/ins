@@ -99,6 +99,19 @@ class NixAdapter(SourceAdapter):
             run(cmd, timeout=600)
         return True
 
+    # ---------------------------------------------------------- outdated/upgrade
+
+    # nix-env tracks versions per user profile; upgrades are resolved at run
+    # time by nix itself, so no dedicated outdated query is exposed.
+
+    def upgrade(self, package_id: str, on_progress=None) -> bool:
+        cmd = ["nix-env", "-u", package_id]
+        if on_progress is not None:
+            run_stream(cmd, on_progress, timeout=900)
+        else:
+            run(cmd, timeout=900)
+        return True
+
     # ----------------------------------------------------------------- update
 
     def update(self, on_progress=None) -> int:

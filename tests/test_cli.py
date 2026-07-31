@@ -149,3 +149,120 @@ def test_no_action_rejected(fake_env, capsys):
     err = capsys.readouterr().err
     assert rc == 2
     assert "no action given" in err
+
+
+def test_list_shows_installed_grouped_by_source(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["-l"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "Installed packages" in out
+    assert "vlc [fake]" in out
+    assert "3.0.20" in out
+
+
+def test_list_empty(fake_env, capsys):
+    rc = cli.main(["-l"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "no packages installed" in out
+
+
+def test_list_json(fake_env, capsys, tmp_path):
+    import json as _json
+
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["-l", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["installed"][0]["name"] == "vlc"
+    assert payload["installed"][0]["source"] == "fake"
+    assert payload["installed"][0]["version"] == "3.0.20"
+
+
+def test_outdated_lists_available_versions(fake_env, capsys):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["-o"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "Updates available" in out
+    assert "vlc [fake]" in out
+    assert "3.0.20" in out
+    assert "3.0.21" in out
+
+
+def test_outdated_all_up_to_date(fake_env, capsys):
+    rc = cli.main(["-o"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "all packages up to date" in out
+
+
+def test_outdated_json(fake_env, capsys):
+    import json as _json
+
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["-o", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["outdated"][0]["name"] == "vlc"
+    assert payload["outdated"][0]["version"] == "3.0.20"
+    assert payload["outdated"][0]["available"] == "3.0.21"
+
+
+def test_upgrade_installed_package(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["-U", "vlc", "-y"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "upgraded vlc from fake" in out
+    assert Cache(tmp_path / "cache.db").get_installed("fake") == [("fake", "vlc", "")]
+
+
+def test_upgrade_not_installed(fake_env, capsys):
+    rc = cli.main(["-U", "vlc", "-y"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "not installed" in err
+
+
+def test_upgrade_requires_package(fake_env, capsys):
+    rc = cli.main(["-U"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "requires at least one package name" in err
+
+
+def test_upgrade_confirm_prompt_denied(fake_env, capsys, monkeypatch, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    monkeypatch.setattr("builtins.input", lambda prompt: "n")
+
+    rc = cli.main(["-U", "vlc"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "skipped vlc" in out
+    assert Cache(tmp_path / "cache.db").get_installed("fake") == [("fake", "vlc", "3.0.20")]
+
+
+def test_list_outdated_conflict_rejected(fake_env, capsys):
+    rc = cli.main(["-l", "-o"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "pick one action" in err

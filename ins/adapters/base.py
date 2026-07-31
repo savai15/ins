@@ -47,6 +47,21 @@ class SourceAdapter(ABC):
         """Refresh the source's package index; return best-effort count of
         packages updated (0 when the source doesn't report a count)."""
 
+    @abstractmethod
+    def upgrade(
+        self,
+        package_id: str,
+        on_progress: Callable[[str], None] | None = None,
+    ) -> bool:
+        """Upgrade one installed package to its latest available version."""
+
+    def outdated(self) -> list[AppInfo]:
+        """Installed packages with a newer version available.
+
+        Returns [] when the source can't report updates (e.g. nix).
+        """
+        return []
+
     def info(self, package_id: str) -> dict[str, str] | None:
         """Optional: extra detail fields (license, homepage, description)
         for one package; None when the source can't provide them."""

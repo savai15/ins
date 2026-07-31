@@ -24,6 +24,8 @@ detection, and per-package detail views across every source on your system.
 - **`ins info`** — license, homepage, size, version, and install state per
   source, in one glance.
 - **`ins -u`** — updates every detected source in sequence with a summary.
+- **`ins -l` / `ins -o` / `ins -U <pkg>...`** — list installed packages,
+  see which have newer versions available, and upgrade them individually.
 - **Offline-friendly** — local SQLite cache with TTL; stale results are marked
   instead of failing when a source is unreachable.
 - **`--json`** — machine-readable output for scripting.
@@ -106,6 +108,23 @@ $ ins -u
 6 packages updated across fake, fake2
 ```
 
+See what's installed and what has updates, then upgrade:
+
+```text
+$ ins -l
+Installed packages
+Package               Version
+vlc [fake]            3.0.20
+
+$ ins -o
+Updates available
+Package               Installed  Available
+vlc [fake]            3.0.20     3.0.21
+
+$ ins -U vlc -y
+upgraded vlc from fake
+```
+
 Detail view per source:
 
 ```text
@@ -157,24 +176,27 @@ $ ins -s vlc --json
 | `ins -i <pkg>...`   | install one or more packages (`-y` to skip prompt)  |
 | `ins -r <pkg>...`   | remove one or more packages                         |
 | `ins -u`            | update every detected source's index               |
+| `ins -l`            | list installed packages grouped by source          |
+| `ins -o`            | list packages with newer versions available        |
+| `ins -U <pkg>...`   | upgrade installed packages                         |
 | `ins info <pkg>`    | detail view: license, homepage, size per source     |
 | `ins doctor`        | find + resolve duplicate installs                   |
 | `--s <source>`      | restrict any action to specific sources             |
-| `--json`            | machine-readable output (search, info)              |
+| `--json`            | machine-readable output (search, info, list, outdated) |
 | `-y / --yes`        | assume yes (scripting)                              |
 
 ## Supported sources
 
-| Source   | Search            | Install/Remove          | Update            |
-| -------- | ----------------- | ----------------------- | ----------------- |
-| apt      | python-apt or apt-cache | `apt-get -y` (pkexec/sudo) | `apt-get update` |
-| flatpak  | `flatpak search`  | `flatpak install/uninstall --user` | `flatpak update --user` |
-| dnf      | `dnf search -q`   | `dnf install/remove -y`  | `dnf upgrade -y` |
-| pacman   | `pacman -Ss`      | `pacman -S/-R --noconfirm` | `pacman -Sy`   |
-| zypper   | `zypper -q search`| `zypper -n install/remove` | `zypper -n refresh` |
-| snap     | `snap find`       | `snap install/remove`    | `snap refresh`  |
-| nix      | `nix search nixpkgs` | `nix-env -iA/-e`      | `nix-channel --update` |
-| apk      | `apk search -d`   | `apk add/del`            | `apk update`    |
+| Source   | Search            | Install/Remove          | Update            | Outdated              | Upgrade                 |
+| -------- | ----------------- | ----------------------- | ----------------- | --------------------- | ----------------------- |
+| apt      | python-apt or apt-cache | `apt-get -y` (pkexec/sudo) | `apt-get update` | `apt list --upgradable` | `apt-get install --only-upgrade` |
+| flatpak  | `flatpak search`  | `flatpak install/uninstall --user` | `flatpak update --user` | `flatpak remote-ls --updates` | `flatpak update --user` |
+| dnf      | `dnf search -q`   | `dnf install/remove -y`  | `dnf upgrade -y` | `dnf list --upgrades`  | `dnf upgrade -y`        |
+| pacman   | `pacman -Ss`      | `pacman -S/-R --noconfirm` | `pacman -Sy`   | `pacman -Qu`           | `pacman -S --noconfirm` |
+| zypper   | `zypper -q search`| `zypper -n install/remove` | `zypper -n refresh` | `zypper -q list-updates` | `zypper -n update`   |
+| snap     | `snap find`       | `snap install/remove`    | `snap refresh`  | `snap refresh --list`  | `snap refresh`          |
+| nix      | `nix search nixpkgs` | `nix-env -iA/-e`      | `nix-channel --update` | — (resolved at run time) | `nix-env -u`         |
+| apk      | `apk search -d`   | `apk add/del`            | `apk update`    | `apk upgrade -s`       | `apk add -u`            |
 
 Sources are auto-detected by tool presence and skipped when absent. The demo
 sources `fake` / `fake2` (with `INS_FAKE=1`) power the test suite and let you
@@ -204,7 +226,7 @@ max_entries = 5000
 ```bash
 git clone https://github.com/savai15/ins && cd ins
 pip install -e ".[dev]"
-pytest -q        # 155 tests, all subprocess calls stubbed with real Linux output
+pytest -q        # 185 tests, all subprocess calls stubbed with real Linux output
 ```
 
 The test suite replays *real* captured package-manager output

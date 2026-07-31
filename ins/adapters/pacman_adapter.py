@@ -113,6 +113,43 @@ class PacmanAdapter(SourceAdapter):
             run_privileged(cmd, timeout=600)
         return 0
 
+    # ---------------------------------------------------------- outdated/upgrade
+
+    def outdated(self) -> list[AppInfo]:
+        proc = run(["pacman", "-Qu"], timeout=_SEARCH_TIMEOUT, check=False)
+        if proc.returncode != 0:
+            return []
+        out: list[AppInfo] = []
+        for line in proc.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            name = parts[0]
+            if "->" in parts:
+                arrow = parts.index("->")
+                installed, available = parts[arrow - 1], parts[arrow + 1]
+            else:
+                installed, available = "", parts[1]
+            out.append(
+                AppInfo(
+                    id=name,
+                    name=name,
+                    source=self.name,
+                    version=installed,
+                    available=available,
+                    installed=True,
+                )
+            )
+        return out
+
+    def upgrade(self, package_id: str, on_progress=None) -> bool:
+        cmd = ["pacman", "-S", "--noconfirm", package_id]
+        if on_progress is not None:
+            run_privileged_stream(cmd, on_progress, timeout=600)
+        else:
+            run_privileged(cmd, timeout=600)
+        return True
+
     # ------------------------------------------------------------------- info
 
     def info(self, package_id: str) -> dict[str, str] | None:

@@ -156,6 +156,89 @@ def test_apk_is_available(monkeypatch):
     assert ApkAdapter().is_available() is False
 
 
+def test_zypper_outdated_parses_list_updates(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.zypper_adapter", ["zypper", "rpm"])
+    calls = patch_runner(
+        monkeypatch,
+        "ins.adapters.zypper_adapter",
+        [(["zypper", "-q", "list-updates"], 0, samples.ZYPPER_LIST_UPDATES, "")],
+    )
+
+    outdated = ZypperAdapter().outdated()
+
+    assert calls[0][:3] == ["zypper", "-q", "list-updates"]
+    by_id = {i.id: i for i in outdated}
+    assert set(by_id) == {"vlc"}
+    assert by_id["vlc"].version == "3.0.20-1.1"
+    assert by_id["vlc"].available == "3.0.21-1.1"
+    assert all(i.installed for i in outdated)
+
+
+def test_zypper_upgrade_uses_privileged(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.zypper_adapter", ["zypper", "rpm"])
+    calls = patch_runner(
+        monkeypatch,
+        "ins.adapters.zypper_adapter",
+        [(["zypper", "-n", "update"], 0, "", "")],
+    )
+    monkeypatch.setattr(
+        "ins.adapters._subprocess.shutil.which",
+        lambda name: "/usr/bin/sudo" if name == "sudo" else None,
+    )
+
+    assert ZypperAdapter().upgrade("vlc") is True
+
+    assert calls == [["sudo", "zypper", "-n", "update", "vlc"]]
+
+
+def test_nix_upgrade_uses_user_level_nix_env(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.nix_adapter", ["nix", "nix-env"])
+    calls = patch_runner(
+        monkeypatch,
+        "ins.adapters.nix_adapter",
+        [(["nix-env", "-u"], 0, "", "")],
+    )
+
+    assert NixAdapter().upgrade("vlc") is True
+
+    assert calls == [["nix-env", "-u", "vlc"]]
+
+
+def test_apk_outdated_parses_simulated_upgrade(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.apk_adapter", ["apk"])
+    calls = patch_runner(
+        monkeypatch,
+        "ins.adapters.apk_adapter",
+        [(["apk", "upgrade", "-s"], 0, samples.APK_UPGRADE_S, "")],
+    )
+
+    outdated = ApkAdapter().outdated()
+
+    assert calls[0][:3] == ["apk", "upgrade", "-s"]
+    by_id = {i.id: i for i in outdated}
+    assert set(by_id) == {"vlc", "zlib"}
+    assert by_id["vlc"].available == "3.0.21-r0"
+    assert by_id["zlib"].available == "1.3.1-r2"
+    assert all(i.installed for i in outdated)
+
+
+def test_apk_upgrade_uses_privileged(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.apk_adapter", ["apk"])
+    calls = patch_runner(
+        monkeypatch,
+        "ins.adapters.apk_adapter",
+        [(["apk", "add", "-u"], 0, "", "")],
+    )
+    monkeypatch.setattr(
+        "ins.adapters._subprocess.shutil.which",
+        lambda name: "/usr/bin/sudo" if name == "sudo" else None,
+    )
+
+    assert ApkAdapter().upgrade("vlc") is True
+
+    assert calls == [["sudo", "apk", "add", "-u", "vlc"]]
+
+
 def test_apk_search_parses_descriptions(monkeypatch):
     patch_which(monkeypatch, "ins.adapters.apk_adapter", ["apk"])
     calls = patch_runner(

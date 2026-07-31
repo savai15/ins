@@ -17,6 +17,7 @@ class AppInfo:
     description: str = ""
     source: str = ""
     version: str = ""
+    available: str = ""
     size: int = 0
     installed: bool = False
     popularity: float = 0.0

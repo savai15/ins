@@ -7,15 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `ins -l` / `--list` — installed packages grouped by source (`--json` supported)
+- `ins -o` / `--outdated` — installed → available version table per source,
+  parsed from `apt list --upgradable`, `flatpak remote-ls --updates`,
+  `dnf list --upgrades`, `pacman -Qu`, `zypper list-updates`,
+  `snap refresh --list`, and `apk upgrade -s` (`--json` supported)
+- `ins -U <pkg>...` — upgrade installed packages one at a time with the same
+  confirm + live-progress flow as install (`apt-get install --only-upgrade`,
+  `flatpak update --user`, `dnf upgrade`, `pacman -S`, `zypper update`,
+  `snap refresh`, `apk add -u`, `nix-env -u`)
+- `AppInfo.available` field for upgrade-target versions (cache-safe round trip)
+
 ### Planned
-- `ins list` / `ins outdated` / `ins upgrade <pkg>` — list, inspect, and update
-  individual packages across all sources
 - `ins export` + `ins bundle install|check` — declarative machine provisioning
 - Interactive search/install picker (type-to-filter, arrow keys)
 - `--dry-run` transaction previews for install/remove/update
 - Install/remove transaction history with undo
 - Extended `ins -u`: pipx, uv, rustup, fwupd, and custom commands from config
-- `-q/--quiet`, `--no-progress`, JSON output for doctor/update/list/outdated
+- `-q/--quiet`, `--no-progress`, JSON output for doctor/update
 - CI (pytest matrix + lint), man page, package-name shell completions
 
 ## [0.1.0] - 2026-07-31

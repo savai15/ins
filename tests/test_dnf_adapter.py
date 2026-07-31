@@ -93,3 +93,38 @@ def test_remove_uses_privileged_dnf(monkeypatch):
     assert DnfAdapter().remove("vlc") is True
 
     assert calls == [["sudo", "dnf", "remove", "-y", "vlc"]]
+
+
+def test_outdated_parses_list_upgrades(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.dnf_adapter", ["dnf", "rpm"])
+    calls = patch_runner(
+        monkeypatch,
+        "ins.adapters.dnf_adapter",
+        [(["dnf", "list", "--upgrades"], 0, samples.DNF_LIST_UPGRADES, "")],
+    )
+
+    outdated = DnfAdapter().outdated()
+
+    assert calls[0][:4] == ["dnf", "list", "--upgrades", "-q"]
+    by_id = {i.id: i for i in outdated}
+    assert set(by_id) == {"vlc", "zlib"}
+    assert by_id["vlc"].available == "3.0.21-1.fc40"
+    assert by_id["zlib"].available == "1.3.1-2.fc40"
+    assert all(i.installed for i in outdated)
+
+
+def test_upgrade_uses_privileged_dnf(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.dnf_adapter", ["dnf", "rpm"])
+    calls = patch_runner(
+        monkeypatch,
+        "ins.adapters.dnf_adapter",
+        [(["dnf", "upgrade"], 0, "", "")],
+    )
+    monkeypatch.setattr(
+        "ins.adapters._subprocess.shutil.which",
+        lambda name: "/usr/bin/sudo" if name == "sudo" else None,
+    )
+
+    assert DnfAdapter().upgrade("vlc") is True
+
+    assert calls == [["sudo", "dnf", "upgrade", "-y", "vlc"]]

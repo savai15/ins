@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 
 from ins.adapters._subprocess import check_rc, run, run_privileged, run_privileged_stream
@@ -9,6 +10,8 @@ from ins.adapters.base import SourceAdapter
 from ins.models import AppInfo
 
 _SEARCH_TIMEOUT = 60.0
+
+_ARCH_SUFFIX_RE = re.compile(r"\.(x86_64|i686|noarch|aarch64|armv7hl|ppc64le|s390x)$")
 
 
 class DnfAdapter(SourceAdapter):
@@ -111,6 +114,36 @@ class DnfAdapter(SourceAdapter):
                     break
                 count += 1
         return count
+
+    # ---------------------------------------------------------- outdated/upgrade
+
+    def outdated(self) -> list[AppInfo]:
+        proc = run(["dnf", "list", "--upgrades", "-q"], timeout=_SEARCH_TIMEOUT, check=False)
+        out: list[AppInfo] = []
+        for line in proc.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            name = _ARCH_SUFFIX_RE.sub("", parts[0])
+            out.append(
+                AppInfo(
+                    id=name,
+                    name=name,
+                    source=self.name,
+                    version="",
+                    available=parts[1],
+                    installed=True,
+                )
+            )
+        return out
+
+    def upgrade(self, package_id: str, on_progress=None) -> bool:
+        cmd = ["dnf", "upgrade", "-y", package_id]
+        if on_progress is not None:
+            run_privileged_stream(cmd, on_progress, timeout=600)
+        else:
+            run_privileged(cmd, timeout=600)
+        return True
 
     # ------------------------------------------------------------------- info
 

@@ -12,6 +12,7 @@ def _routes():
     return [
         (["pacman", "-Ss"], 0, samples.PACMAN_SS, ""),
         (["pacman", "-Q"], 0, samples.PACMAN_Q, ""),
+        (["pacman", "-Qu"], 0, samples.PACMAN_QU, ""),
         (["pacman", "-S"], 0, "", ""),
         (["pacman", "-R"], 0, "", ""),
     ]
@@ -80,3 +81,33 @@ def test_remove_uses_privileged_pacman(monkeypatch):
     assert PacmanAdapter().remove("vlc") is True
 
     assert calls == [["sudo", "pacman", "-R", "--noconfirm", "vlc"]]
+
+
+def test_outdated_parses_qu(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.pacman_adapter", ["pacman"])
+    calls = patch_runner(monkeypatch, "ins.adapters.pacman_adapter", _routes())
+
+    outdated = PacmanAdapter().outdated()
+
+    assert calls[0] == ["pacman", "-Qu"]
+    by_id = {i.id: i for i in outdated}
+    assert set(by_id) == {"vlc", "firefox", "zlib"}
+    assert by_id["vlc"].version == "3.0.20-2"
+    assert by_id["vlc"].available == "3.0.21-1"
+    assert by_id["firefox"].available == "131.0-1"
+    assert by_id["zlib"].version == ""
+    assert by_id["zlib"].available == "1:1.3.1-1"
+    assert all(i.installed for i in outdated)
+
+
+def test_upgrade_uses_privileged_pacman(monkeypatch):
+    patch_which(monkeypatch, "ins.adapters.pacman_adapter", ["pacman"])
+    calls = patch_runner(monkeypatch, "ins.adapters.pacman_adapter", _routes())
+    monkeypatch.setattr(
+        "ins.adapters._subprocess.shutil.which",
+        lambda name: "/usr/bin/sudo" if name == "sudo" else None,
+    )
+
+    assert PacmanAdapter().upgrade("vlc") is True
+
+    assert calls == [["sudo", "pacman", "-S", "--noconfirm", "vlc"]]

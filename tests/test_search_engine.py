@@ -99,6 +99,9 @@ def test_failing_source_does_not_kill_search():
         def update(self, on_progress=None):
             return 0
 
+        def upgrade(self, package_id, on_progress=None):
+            return True
+
     engine = SearchEngine([BrokenAdapter(), FakeAdapter("fake")])
     results = engine.search("vlc")
     assert len(results) == 1
@@ -136,6 +139,9 @@ def test_offline_fallback_uses_stale_cache(fake_pair, tmp_path):
         def update(self, on_progress=None):
             return 0
 
+        def upgrade(self, package_id, on_progress=None):
+            return True
+
     cache.put_results("dead", "vlc", [AppInfo(id="vlc", name="vlc", source="dead", description="cached copy")])
     engine = SearchEngine([DeadAdapter()], cache=cache, ttl=0)
     results = engine.search("vlc")
@@ -172,6 +178,9 @@ def test_fresh_cache_skips_live_query(fake_pair, tmp_path):
         def update(self, on_progress=None):
             return 0
 
+        def upgrade(self, package_id, on_progress=None):
+            return True
+
     engine = SearchEngine([ExplodingAdapter()], cache=cache, ttl=3600)
     results = engine.search("vlc")
     assert len(results) == 1
@@ -201,6 +210,9 @@ def test_result_cap():
 
         def update(self, on_progress=None):
             return 0
+
+        def upgrade(self, package_id, on_progress=None):
+            return True
 
     engine = SearchEngine([ManyAdapter()], cap=3)
     results = engine.search("pkg")

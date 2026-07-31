@@ -120,6 +120,28 @@ class FakeAdapter(SourceAdapter):
             on_progress("Done.")
         return 3
 
+    def outdated(self) -> list[AppInfo]:
+        if "vlc" not in _STATE[self.name]:
+            return []
+        return [
+            AppInfo(
+                id="vlc",
+                name="vlc",
+                source=self.name,
+                version="3.0.20",
+                available="3.0.21",
+                installed=True,
+            )
+        ]
+
+    def upgrade(self, package_id: str, on_progress=None) -> bool:
+        if any(info.id == package_id for info in CATALOG):
+            if on_progress is not None:
+                on_progress(f"Upgrading: {package_id} (3.0.20 -> 3.0.21)")
+                on_progress("Done.")
+            return True
+        return False
+
     def info(self, package_id: str) -> dict[str, str] | None:
         for info in CATALOG:
             if info.id == package_id:

@@ -92,6 +92,40 @@ class ZypperAdapter(SourceAdapter):
             run_privileged(cmd, timeout=600)
         return 0
 
+    # ---------------------------------------------------------- outdated/upgrade
+
+    def outdated(self) -> list[AppInfo]:
+        proc = run(["zypper", "-q", "list-updates"], timeout=_SEARCH_TIMEOUT, check=False)
+        out: list[AppInfo] = []
+        for line in proc.stdout.splitlines():
+            if " | " not in line:
+                continue
+            cols = [c.strip() for c in line.split("|")]
+            if len(cols) < 7:
+                continue
+            status, name, installed, available = cols[0], cols[2], cols[5], cols[6]
+            if not name or not status.startswith("v"):
+                continue
+            out.append(
+                AppInfo(
+                    id=name,
+                    name=name,
+                    source=self.name,
+                    version=installed,
+                    available=available,
+                    installed=True,
+                )
+            )
+        return out
+
+    def upgrade(self, package_id: str, on_progress=None) -> bool:
+        cmd = ["zypper", "-n", "update", package_id]
+        if on_progress is not None:
+            run_privileged_stream(cmd, on_progress, timeout=600)
+        else:
+            run_privileged(cmd, timeout=600)
+        return True
+
     # ------------------------------------------------------------------- info
 
     def info(self, package_id: str) -> dict[str, str] | None:

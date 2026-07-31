@@ -91,6 +91,54 @@ def render_info(
     console.print(table)
 
 
+def render_list(console: Console, installed: list) -> None:
+    """`ins --list`: installed packages, one row per source install."""
+    if not installed:
+        console.print("[dim]no packages installed[/]")
+        return
+    table = Table(
+        title="Installed packages",
+        title_justify="left",
+        box=None,
+        header_style="bold",
+        pad_edge=False,
+        collapse_padding=True,
+    )
+    table.add_column("Package", min_width=24)
+    table.add_column("Version")
+    for info in installed:
+        table.add_row(
+            f"[bold]{info.name}[/bold] {_source_tag(info.source)}",
+            info.version or "—",
+        )
+    console.print(table)
+
+
+def render_outdated(console: Console, outdated: list) -> None:
+    """`ins --outdated`: installed -> available versions per package."""
+    if not outdated:
+        console.print(f"[{theme.SUCCESS}]all packages up to date[/]")
+        return
+    table = Table(
+        title="Updates available",
+        title_justify="left",
+        box=None,
+        header_style="bold",
+        pad_edge=False,
+        collapse_padding=True,
+    )
+    table.add_column("Package", min_width=24)
+    table.add_column("Installed")
+    table.add_column("Available")
+    for info in outdated:
+        table.add_row(
+            f"[bold]{info.name}[/bold] {_source_tag(info.source)}",
+            info.version or "—",
+            info.available or "?",
+        )
+    console.print(table)
+
+
 def render_duplicates(
     console: Console,
     duplicates: list[tuple[str, list]],

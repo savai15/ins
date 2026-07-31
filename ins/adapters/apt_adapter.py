@@ -226,6 +226,40 @@ class AptAdapter(SourceAdapter):
                 return int(match.group(1))
         return 0
 
+    # ---------------------------------------------------------- outdated/upgrade
+
+    def outdated(self) -> list[AppInfo]:
+        proc = run(["apt", "list", "--upgradable"], timeout=_SEARCH_TIMEOUT, check=False)
+        out: list[AppInfo] = []
+        marker = "upgradable to: "
+        for line in proc.stdout.splitlines():
+            if marker not in line:
+                continue
+            name = line.split("/", 1)[0].strip()
+            installed = line.split()[1]
+            available = line.split(marker, 1)[1].split("]", 1)[0].strip()
+            if not name:
+                continue
+            out.append(
+                AppInfo(
+                    id=name,
+                    name=name,
+                    source=self.name,
+                    version=installed,
+                    available=available,
+                    installed=True,
+                )
+            )
+        return out
+
+    def upgrade(self, package_id: str, on_progress=None) -> bool:
+        cmd = ["apt-get", "-y", "install", "--only-upgrade", package_id]
+        if on_progress is not None:
+            run_privileged_stream(cmd, on_progress, timeout=600)
+        else:
+            run_privileged(cmd, timeout=600)
+        return True
+
     # ------------------------------------------------------------------- info
 
     def info(self, package_id: str) -> dict[str, str] | None:

@@ -165,6 +165,44 @@ class FlatpakAdapter(SourceAdapter):
             lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
         return sum(1 for ln in lines if ln.startswith("Updated "))
 
+    # ---------------------------------------------------------- outdated/upgrade
+
+    def outdated(self) -> list[AppInfo]:
+        proc = run(
+            ["flatpak", "remote-ls", "--updates", "--columns=application,version"],
+            timeout=_SEARCH_TIMEOUT,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return []
+        out: list[AppInfo] = []
+        for line in proc.stdout.splitlines():
+            if not line.strip():
+                continue
+            cols = line.split("\t")
+            app = cols[0].strip()
+            if not app:
+                continue
+            out.append(
+                AppInfo(
+                    id=app,
+                    name=_human_name(app),
+                    source=self.name,
+                    version="",
+                    available=cols[1].strip() if len(cols) > 1 else "",
+                    installed=True,
+                )
+            )
+        return out
+
+    def upgrade(self, package_id: str, on_progress=None) -> bool:
+        cmd = ["flatpak", "update", "--user", "-y", package_id]
+        if on_progress is not None:
+            run_stream(cmd, on_progress, timeout=600)
+        else:
+            run(cmd, timeout=600)
+        return True
+
     # ------------------------------------------------------------------- info
 
     def info(self, package_id: str) -> dict[str, str] | None:

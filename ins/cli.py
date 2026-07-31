@@ -21,7 +21,7 @@ from ins.adapters import registry
 from ins.adapters._subprocess import AdapterError
 from ins.cache import Cache
 from ins.config import Config, DEFAULT_CONFIG_PATH
-from ins.renderer import render_duplicates, render_info, render_search_results
+from ins.renderer import render_duplicates, render_info, render_list, render_outdated, render_search_results
 from ins.search_engine import NoSourcesError, SearchEngine, normalize_key
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -58,6 +58,21 @@ def build_parser() -> argparse.ArgumentParser:
         "-u", "--update",
         action="store_true",
         help="update every detected source's package index",
+    )
+    parser.add_argument(
+        "-l", "--list",
+        action="store_true",
+        help="list installed packages grouped by source",
+    )
+    parser.add_argument(
+        "-o", "--outdated",
+        action="store_true",
+        help="list packages with newer versions available",
+    )
+    parser.add_argument(
+        "-U", "--upgrade",
+        nargs="*", metavar="PKG", dest="upgrade",
+        help="upgrade one or more installed packages",
     )
     parser.add_argument(
         "-y", "--yes",
@@ -389,6 +404,110 @@ def cmd_update(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list(args: argparse.Namespace) -> int:
+    config, adapters, cache, errors = _build_context(args)
+    if errors:
+        print(f"error: {'; '.join(errors)}", file=sys.stderr)
+        return 2
+    if not adapters:
+        print("error: no package sources detected on this system", file=sys.stderr)
+        return 1
+    installed = _scan_installed(adapters)
+    installed.sort(key=lambda i: (i.source, i.name))
+    if args.json:
+        print(json.dumps({"installed": [i.to_dict() for i in installed]}, indent=2))
+        return 0
+    render_list(Console(), installed)
+    return 0
+
+
+def cmd_outdated(args: argparse.Namespace) -> int:
+    config, adapters, cache, errors = _build_context(args)
+    if errors:
+        print(f"error: {'; '.join(errors)}", file=sys.stderr)
+        return 2
+    if not adapters:
+        print("error: no package sources detected on this system", file=sys.stderr)
+        return 1
+    rows: list = []
+    for adapter in adapters:
+        try:
+            rows.extend(adapter.outdated())
+        except AdapterError:
+            print(f"warning: could not check {adapter.name} for updates", file=sys.stderr)
+    rows.sort(key=lambda i: (i.source, i.name))
+    if args.json:
+        print(json.dumps({"outdated": [i.to_dict() for i in rows]}, indent=2))
+        return 0
+    render_outdated(Console(), rows)
+    return 0
+
+
+def cmd_upgrade(args: argparse.Namespace) -> int:
+    names = [n for n in (args.upgrade or []) if n]
+    if not names:
+        print("error: upgrade requires at least one package name", file=sys.stderr)
+        return 2
+    config, adapters, cache, errors = _build_context(args)
+    if errors:
+        print(f"error: {'; '.join(errors)}", file=sys.stderr)
+        return 2
+    if not adapters:
+        print("error: no package sources detected on this system", file=sys.stderr)
+        return 1
+    engine = SearchEngine(adapters, cache=cache, ttl=config.cache.ttl_seconds)
+    rc = 0
+    for name in names:
+        target = None
+        adapter = None
+        try:
+            results = engine.search(name, sources=[a.name for a in adapters])
+        except NoSourcesError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        group = next((r for r in results if normalize_key(r.name) == normalize_key(name)), None)
+        if group is not None:
+            candidate = next((i for i in [group.primary, *group.alternatives] if i.installed), None)
+            if candidate is not None:
+                target = candidate
+                adapter = _adapter_by_name(adapters, candidate.source)
+        if target is None:
+            for candidate_adapter in adapters:
+                try:
+                    installed = candidate_adapter.list_installed()
+                except AdapterError:
+                    continue
+                for info in installed:
+                    if info.id == name or normalize_key(info.name) == normalize_key(name):
+                        target = info
+                        adapter = candidate_adapter
+                        break
+                if target is not None:
+                    break
+        if target is None or adapter is None:
+            print(f"error: '{name}' is not installed (or not found)", file=sys.stderr)
+            rc = 1
+            continue
+        if not _confirm(f"Upgrade '{target.name}' from {target.source}? [y/N] ", args):
+            print(f"skipped {target.name}")
+            continue
+        try:
+            _run_with_progress(
+                lambda cb: adapter.upgrade(target.id, on_progress=cb),
+                target.name,
+                Console(),
+            )
+        except AdapterError as exc:
+            print(f"error: failed to upgrade {target.name}: {exc}", file=sys.stderr)
+            rc = 1
+            continue
+        if cache is not None:
+            cache.invalidate(package_id=target.id, source=target.source)
+            cache.mark_installed(target.source, target.id, "")
+        print(f"upgraded {target.name} from {target.source}")
+    return rc
+
+
 # ------------------------------------------------------- info (ins info <pkg>)
 
 def _icon_capable_terminal() -> bool:
@@ -602,6 +721,12 @@ def dispatch(args: argparse.Namespace) -> int:
         chosen.append("remove")
     if args.update:
         chosen.append("update")
+    if args.list:
+        chosen.append("list")
+    if args.outdated:
+        chosen.append("outdated")
+    if args.upgrade is not None:
+        chosen.append("upgrade")
     if len(chosen) > 1:
         print(f"error: pick one action, got: {', '.join(chosen)}", file=sys.stderr)
         return 2
@@ -620,9 +745,16 @@ def dispatch(args: argparse.Namespace) -> int:
         return cmd_remove(args)
     if "update" in chosen:
         return cmd_update(args)
+    if "list" in chosen:
+        return cmd_list(args)
+    if "outdated" in chosen:
+        return cmd_outdated(args)
+    if "upgrade" in chosen:
+        return cmd_upgrade(args)
     print(
         "error: no action given — use -s/--search, -i/--install, -r/--remove, "
-        "-u/--update, or `ins doctor` / `ins info <pkg>`",
+        "-u/--update, -l/--list, -o/--outdated, -U/--upgrade, "
+        "or `ins doctor` / `ins info <pkg>`",
         file=sys.stderr,
     )
     return 2

@@ -15,6 +15,7 @@ from typing import Callable
 from rich.console import Console
 from rich.live import Live
 from rich.progress import Progress
+from rich.table import Table
 
 from ins import __version__, theme
 from ins.adapters import registry
@@ -94,16 +95,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="show what would change without changing anything",
     )
     parser.add_argument(
-        "command", nargs="?", choices=("doctor", "info", "export", "bundle"),
+        "-q", "--quiet",
+        action="store_true",
+        help="suppress informational output (errors still shown)",
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="run actions without the live progress bar",
+    )
+    parser.add_argument(
+        "command", nargs="?", choices=("doctor", "info", "export", "bundle", "history", "undo"),
         help="doctor: scan for duplicate installs across sources; "
              "info <pkg>: detailed view of a package; "
              "export [file]: write installed packages as a TOML manifest; "
-             "bundle check|install <file>: verify or apply a manifest",
+             "bundle check|install <file>: verify or apply a manifest; "
+             "history [n]: show recent transactions; "
+             "undo: reverse the last install/remove",
     )
     parser.add_argument(
         "subject", nargs="?",
         metavar="PKG",
-        help="package name for `ins info`; check/install for `ins bundle`",
+        help="package name for `ins info`; check/install for `ins bundle`; count for `ins history`",
     )
     parser.add_argument(
         "bundle_file", nargs="?",
@@ -164,11 +177,23 @@ def _stdin_is_tty() -> bool:
         return False
 
 
+def _say(args: argparse.Namespace, text: str) -> None:
+    if not args.quiet:
+        print(text)
+
+
+def _run_action(args: argparse.Namespace, runner: Callable[[ProgressCallback], object], name: str, console: Console | None = None) -> object:
+    """Run `runner(on_line)` with a progress bar, or directly with --no-progress / -q / --json."""
+    if args.no_progress or args.quiet or args.json:
+        return runner(None)
+    return _run_with_progress(runner, name, console or Console())
+
+
 def _install_group(group, adapters: list, cache, args: argparse.Namespace) -> int:
     """Confirm and install one GroupedResult via its primary source."""
     info = group.primary
     if group.any_installed:
-        print(f"'{info.name}' is already installed (via {info.source})")
+        _say(args, f"'{info.name}' is already installed (via {info.source})")
         return 0
     adapter = _adapter_by_name(adapters, info.source)
     if adapter is None:
@@ -176,21 +201,18 @@ def _install_group(group, adapters: list, cache, args: argparse.Namespace) -> in
         return 1
     size = f" ({info.size_human})" if info.size else ""
     if not _confirm(f"Install '{info.name}' from {info.source}{size}? [y/N] ", args):
-        print(f"skipped {info.name}")
+        _say(args, f"skipped {info.name}")
         return 0
     try:
-        _run_with_progress(
-            lambda cb: adapter.install(info.id, on_progress=cb),
-            info.name,
-            Console(),
-        )
+        _run_action(args, lambda cb: adapter.install(info.id, on_progress=cb), info.name)
     except AdapterError as exc:
         print(f"error: failed to install {info.name}: {exc}", file=sys.stderr)
         return 1
     if cache is not None:
         cache.invalidate(package_id=info.id, source=info.source)
         cache.mark_installed(info.source, info.id, info.version)
-    print(f"installed {info.name} from {info.source}")
+        cache.record("install", info.source, info.id, info.version)
+    _say(args, f"installed {info.name} from {info.source}")
     return 0
 
 
@@ -406,14 +428,10 @@ def cmd_remove(args: argparse.Namespace) -> int:
             )
             continue
         if not _confirm(f"Remove '{target.name}' from {target.source}? [y/N] ", args):
-            print(f"skipped {target.name}")
+            _say(args, f"skipped {target.name}")
             continue
         try:
-            _run_with_progress(
-                lambda cb: adapter.remove(target.id, on_progress=cb),
-                target.name,
-                Console(),
-            )
+            _run_action(args, lambda cb: adapter.remove(target.id, on_progress=cb), target.name)
         except AdapterError as exc:
             print(f"error: failed to remove {target.name}: {exc}", file=sys.stderr)
             rc = 1
@@ -422,7 +440,8 @@ def cmd_remove(args: argparse.Namespace) -> int:
         if cache is not None:
             cache.invalidate(package_id=target.id, source=target.source)
             cache.mark_removed(target.source, target.id)
-        print(f"removed {target.name} from {target.source}")
+            cache.record("remove", target.source, target.id, target.version)
+        _say(args, f"removed {target.name} from {target.source}")
     if args.dry_run:
         if args.json:
             print(json.dumps({"dry_run": True, "action": "remove", "packages": rows}, indent=2))
@@ -460,28 +479,30 @@ def cmd_update(args: argparse.Namespace) -> int:
     console = Console()
     total = 0
     sources_ok: list[str] = []
+    counts: dict[str, int] = {}
     failed: list[str] = []
     for adapter in adapters:
         try:
-            count = _run_with_progress(
-                lambda cb: adapter.update(on_progress=cb),
-                adapter.name,
-                console,
-            )
+            count = _run_action(args, lambda cb: adapter.update(on_progress=cb), adapter.name, console)
         except AdapterError as exc:
             print(f"error: {adapter.name}: {exc}", file=sys.stderr)
             failed.append(adapter.name)
             continue
         total += int(count or 0)
+        counts[adapter.name] = int(count or 0)
         sources_ok.append(adapter.name)
+    if args.json:
+        print(json.dumps({"sources": counts, "failed": failed, "total": total}, indent=2))
+        return 1 if failed else 0
     if sources_ok:
         if total:
-            console.print(
-                f"{total} packages updated across {', '.join(sources_ok)}",
-                style=theme.SUCCESS,
-            )
+            if not args.quiet:
+                console.print(
+                    f"{total} packages updated across {', '.join(sources_ok)}",
+                    style=theme.SUCCESS,
+                )
         else:
-            print("all sources up to date")
+            _say(args, "all sources up to date")
     if failed:
         print(f"error: {len(failed)} source(s) failed: {', '.join(failed)}", file=sys.stderr)
         return 1
@@ -611,14 +632,10 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
                 print(f"would upgrade {target.name} from {target.source}")
             continue
         if not _confirm(f"Upgrade '{target.name}' from {target.source}? [y/N] ", args):
-            print(f"skipped {target.name}")
+            _say(args, f"skipped {target.name}")
             continue
         try:
-            _run_with_progress(
-                lambda cb: adapter.upgrade(target.id, on_progress=cb),
-                target.name,
-                Console(),
-            )
+            _run_action(args, lambda cb: adapter.upgrade(target.id, on_progress=cb), target.name)
         except AdapterError as exc:
             print(f"error: failed to upgrade {target.name}: {exc}", file=sys.stderr)
             rc = 1
@@ -626,7 +643,8 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
         if cache is not None:
             cache.invalidate(package_id=target.id, source=target.source)
             cache.mark_installed(target.source, target.id, "")
-        print(f"upgraded {target.name} from {target.source}")
+            cache.record("upgrade", target.source, target.id)
+        _say(args, f"upgraded {target.name} from {target.source}")
     if args.dry_run and args.json:
         print(json.dumps({"dry_run": True, "action": "upgrade", "packages": rows}, indent=2))
     return rc
@@ -792,6 +810,26 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         for key, infos in sorted(groups.items())
         if len({i.source for i in infos}) > 1
     ]
+    if args.json:
+        payload = {
+            "duplicates": [
+                {
+                    "name": infos[0].name,
+                    "sources": [i.source for i in infos],
+                    "versions": [i.version for i in infos],
+                }
+                for _key, infos in duplicates
+            ],
+            "sources": {
+                "detected": [a.name for a in adapters],
+                "known": len(registry.known_sources()),
+            },
+        }
+        if cache is not None:
+            stats = cache.stats()
+            payload["cache"] = {k: v for k, v in stats.items() if k != "path"}
+        print(json.dumps(payload, indent=2))
+        return 0
     render_duplicates(console, duplicates)
     _render_health(console, adapters, cache, config)
 
@@ -809,14 +847,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             if adapter is None:
                 continue
             if not _confirm(f"Remove '{info.name}' from {info.source}? [y/N] ", args):
-                print(f"skipped {info.name} from {info.source}")
+                _say(args, f"skipped {info.name} from {info.source}")
                 continue
             try:
-                _run_with_progress(
-                    lambda cb: adapter.remove(info.id, on_progress=cb),
-                    info.name,
-                    Console(),
-                )
+                _run_action(args, lambda cb: adapter.remove(info.id, on_progress=cb), info.name)
             except AdapterError as exc:
                 print(f"error: failed to remove {info.name} from {info.source}: {exc}", file=sys.stderr)
                 rc = 1
@@ -825,11 +859,102 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             if cache is not None:
                 cache.invalidate(package_id=info.id, source=info.source)
                 cache.mark_removed(info.source, info.id)
-            print(f"removed {info.name} from {info.source}")
+                cache.record("remove", info.source, info.id)
+            _say(args, f"removed {info.name} from {info.source}")
     return rc
 
 
 # -------------------------------------------------------- bundle (ins export / ins bundle)
+
+def cmd_history(args: argparse.Namespace) -> int:
+    config, adapters, cache, errors = _build_context(args)
+    if errors:
+        print(f"error: {'; '.join(errors)}", file=sys.stderr)
+        return 2
+    limit = 20
+    if args.subject:
+        try:
+            limit = int(args.subject)
+        except ValueError:
+            print(f"error: invalid history size '{args.subject}'", file=sys.stderr)
+            return 2
+    records = [] if cache is None else cache.history(limit)
+    if args.json:
+        print(json.dumps({"history": records}, indent=2))
+        return 0
+    console = Console()
+    if not records:
+        console.print("[dim]no transactions recorded yet[/]")
+        return 0
+    table = Table(box=None, header_style="bold", pad_edge=False, collapse_padding=True)
+    table.add_column("When")
+    table.add_column("Action")
+    table.add_column("Package")
+    table.add_column("Source")
+    table.add_column("Version")
+    for record in records:
+        table.add_row(record["ts"], record["action"], record["package"], record["source"], record["version"] or "—")
+    console.print(table)
+    return 0
+
+
+def cmd_undo(args: argparse.Namespace) -> int:
+    config, adapters, cache, errors = _build_context(args)
+    if errors:
+        print(f"error: {'; '.join(errors)}", file=sys.stderr)
+        return 2
+    if cache is None:
+        print("error: no transaction history available", file=sys.stderr)
+        return 1
+    record = cache.undo_target()
+    if record is None:
+        print("nothing to undo")
+        return 0
+    action = record["action"]
+    source = record["source"]
+    package = record["package"]
+    version = record["version"]
+    adapter = _adapter_by_name(adapters, source)
+    if adapter is None:
+        print(f"error: cannot undo: source '{source}' is not available on this system", file=sys.stderr)
+        return 1
+    try:
+        installed = {info.id for info in adapter.list_installed()}
+    except AdapterError:
+        print(f"error: cannot verify state of {source}", file=sys.stderr)
+        return 1
+    if action == "install":
+        if package not in installed:
+            print(f"error: cannot undo: '{package}' is no longer installed via {source}", file=sys.stderr)
+            return 1
+        prompt = f"Undo install: remove '{package}' from {source}? [y/N] "
+    else:
+        if package in installed:
+            print(f"error: cannot undo: '{package}' is still installed via {source}", file=sys.stderr)
+            return 1
+        prompt = f"Undo remove: reinstall '{package}' from {source}? [y/N] "
+    if not _confirm(prompt, args):
+        _say(args, "skipped")
+        return 0
+    try:
+        if action == "install":
+            _run_action(args, lambda cb: adapter.remove(package, on_progress=cb), package)
+            if cache is not None:
+                cache.mark_removed(source, package)
+                cache.invalidate(package_id=package, source=source)
+            _say(args, f"undid install of {package} from {source}")
+        else:
+            _run_action(args, lambda cb: adapter.install(package, on_progress=cb), package)
+            if cache is not None:
+                cache.invalidate(package_id=package, source=source)
+                cache.mark_installed(source, package, version)
+            _say(args, f"undid remove of {package} from {source}")
+    except AdapterError as exc:
+        print(f"error: failed to undo: {exc}", file=sys.stderr)
+        return 1
+    cache.mark_undone(record["id"])
+    return 0
+
 
 def cmd_export(args: argparse.Namespace, target: str | None) -> int:
     config, adapters, cache, errors = _build_context(args)
@@ -897,11 +1022,7 @@ def _bundle_install(args: argparse.Namespace, report: dict, adapters: list, cach
             print(f"skipped {pkg}")
             continue
         try:
-            _run_with_progress(
-                lambda cb: adapter.install(pkg, on_progress=cb),
-                pkg,
-                console,
-            )
+            _run_action(args, lambda cb: adapter.install(pkg, on_progress=cb), pkg, console)
         except AdapterError as exc:
             print(f"error: failed to install {pkg}: {exc}", file=sys.stderr)
             rc = 1
@@ -909,7 +1030,8 @@ def _bundle_install(args: argparse.Namespace, report: dict, adapters: list, cach
         if cache is not None:
             cache.invalidate(package_id=pkg, source=source)
             cache.mark_installed(source, pkg, "")
-        print(f"installed {pkg} from {source}")
+            cache.record("install", source, pkg)
+        _say(args, f"installed {pkg} from {source}")
     return rc
 
 
@@ -957,6 +1079,10 @@ def dispatch(args: argparse.Namespace) -> int:
         chosen.append("export")
     if args.command == "bundle":
         chosen.append("bundle")
+    if args.command == "history":
+        chosen.append("history")
+    if args.command == "undo":
+        chosen.append("undo")
     if args.search is not None:
         chosen.append("search")
     if args.install is not None:
@@ -985,6 +1111,10 @@ def dispatch(args: argparse.Namespace) -> int:
         return cmd_export(args, args.subject)
     if args.command == "bundle":
         return cmd_bundle(args, args.subject, args.bundle_file)
+    if args.command == "history":
+        return cmd_history(args)
+    if args.command == "undo":
+        return cmd_undo(args)
     if "search" in chosen:
         return cmd_search(args)
     if "install" in chosen:
@@ -1004,7 +1134,8 @@ def dispatch(args: argparse.Namespace) -> int:
     print(
         "error: no action given — use -s/--search, -i/--install, -r/--remove, "
         "-u/--update, -l/--list, -o/--outdated, -U/--upgrade, "
-        "or `ins doctor` / `ins info <pkg>` / `ins export` / `ins bundle check|install <file>`",
+        "or `ins doctor` / `ins info <pkg>` / `ins export` / `ins bundle check|install <file>`"
+        " / `ins history` / `ins undo`",
         file=sys.stderr,
     )
     return 2

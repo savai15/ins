@@ -27,11 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   arrow-key search/install UI (rich Live, termios/msvcrt raw keys)
 - `--dry-run` — transaction previews for `-i`, `-r`, `-u`, and `-U`
   (versions, sizes, per-source update counts; `--json` supported)
+- Transaction history — every install/remove/upgrade is recorded in the cache
+  (`ins history [n]`, default 20; `--json` supported)
+- `ins undo` — reverses the last install or remove transaction (removes what
+  was installed, reinstalls what was removed), with a package-state check
+  before acting
+- `-q/--quiet` — suppress success messages (errors still shown)
+- `--no-progress` — run without the live progress bar
+- `--json` output for `ins doctor` (duplicates, sources, cache stats) and
+  `ins -u` (per-source update counts)
 
 ### Planned
-- Install/remove transaction history with undo
 - Extended `ins -u`: pipx, uv, rustup, fwupd, and custom commands from config
-- `-q/--quiet`, `--no-progress`, JSON output for doctor/update
 - CI (pytest matrix + lint), man page, package-name shell completions
 
 ## [0.1.0] - 2026-07-31

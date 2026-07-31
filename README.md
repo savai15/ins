@@ -32,6 +32,11 @@ detection, and per-package detail views across every source on your system.
   see which have newer versions available, and upgrade them individually.
 - **`ins export` / `ins bundle`** — declarative provisioning: dump what's
   installed to a TOML manifest, check drift, and reinstall it on a fresh box.
+- **`ins history` / `ins undo`** — every install/remove/upgrade is recorded;
+  `ins undo` reverses the last one (removes what you installed, reinstalls
+  what you removed), with a state check before acting.
+- **Quiet mode** — `-q` silences success messages (errors still print) and
+  `--no-progress` drops the live progress bar for pipelines.
 - **Offline-friendly** — local SQLite cache with TTL; stale results are marked
   instead of failing when a source is unreachable.
 - **`--json`** — machine-readable output for scripting.
@@ -217,9 +222,13 @@ $ ins -s vlc --json
 | `ins bundle install <file>` | install what the manifest is missing       |
 | `ins info <pkg>`    | detail view: license, homepage, size per source     |
 | `ins doctor`        | find + resolve duplicate installs                   |
+| `ins history [n]`   | show the last n install/remove/upgrade transactions (default 20) |
+| `ins undo`          | reverse the last install or remove transaction      |
 | `--s <source>`      | restrict any action to specific sources             |
 | `--dry-run`         | preview install/remove/update/upgrade without changing anything |
-| `--json`            | machine-readable output (search, info, list, outdated, bundle check, dry-run) |
+| `--json`            | machine-readable output (search, info, list, outdated, bundle check, doctor, update, dry-run, history) |
+| `-q / --quiet`      | suppress success messages and progress (errors still shown) |
+| `--no-progress`     | run without the live progress bar                   |
 | `-y / --yes`        | assume yes (scripting)                              |
 
 ## Supported sources
@@ -263,7 +272,7 @@ max_entries = 5000
 ```bash
 git clone https://github.com/savai15/ins && cd ins
 pip install -e ".[dev]"
-pytest -q        # 225 tests, all subprocess calls stubbed with real Linux output
+pytest -q        # 244 tests, all subprocess calls stubbed with real Linux output
 ```
 
 The test suite replays *real* captured package-manager output

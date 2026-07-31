@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS installed (
     version TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (source, id)
 );
+CREATE TABLE IF NOT EXISTS history (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts      TEXT NOT NULL,
+    action  TEXT NOT NULL,
+    source  TEXT NOT NULL,
+    package TEXT NOT NULL,
+    version TEXT NOT NULL DEFAULT '',
+    ok      INTEGER NOT NULL DEFAULT 1
+);
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -316,6 +325,71 @@ class Cache:
             self._ok = False
             return []
         return [(r["source"], r["id"], r["version"]) for r in rows]
+
+    # --------------------------------------------------------- transaction history
+
+    def record(self, action: str, source: str, package_id: str, version: str = "", ok: bool = True) -> None:
+        """Append one install/remove/upgrade transaction to the history."""
+        if not self._ok:
+            return
+
+        def op() -> None:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO history(ts, action, source, package, version, ok)"
+                    " VALUES(?, ?, ?, ?, ?, ?)",
+                    (time.strftime("%Y-%m-%d %H:%M:%S"), action, source, package_id, version, int(ok)),
+                )
+
+        try:
+            self._retry(op)
+        except sqlite3.Error:
+            self._ok = False
+
+    def history(self, limit: int = 20) -> list[dict]:
+        """Most recent transactions, newest first."""
+        if not self._ok:
+            return []
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT id, ts, action, source, package, version, ok"
+                    " FROM history ORDER BY id DESC LIMIT ?",
+                    (max(1, limit),),
+                ).fetchall()
+        except sqlite3.Error:
+            self._ok = False
+            return []
+        return [dict(row) for row in rows]
+
+    def undo_target(self) -> dict | None:
+        """Most recent install/remove record that has not been undone."""
+        if not self._ok:
+            return None
+        try:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT id, ts, action, source, package, version, ok"
+                    " FROM history WHERE action IN ('install', 'remove') AND ok = 1"
+                    " ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+        except sqlite3.Error:
+            self._ok = False
+            return None
+        return dict(row) if row is not None else None
+
+    def mark_undone(self, record_id: int) -> None:
+        if not self._ok:
+            return
+
+        def op() -> None:
+            with self._connect() as conn:
+                conn.execute("UPDATE history SET ok = 0 WHERE id = ?", (record_id,))
+
+        try:
+            self._retry(op)
+        except sqlite3.Error:
+            self._ok = False
 
 
 def _decode_infos(data: str) -> list[AppInfo]:

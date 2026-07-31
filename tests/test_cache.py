@@ -163,3 +163,37 @@ def test_corrupt_entry_degrades_to_empty(cache):
             "INSERT OR REPLACE INTO search_cache(source, query, data, fetched_at) VALUES('apt', 'x', 'not-json', 0)"
         )
     assert cache.get_any("apt", "x") == []
+
+
+def test_history_records_and_lists_newest_first(cache):
+    cache.record("install", "apt", "vlc", "3.0.20")
+    cache.record("remove", "apt", "vlc")
+    cache.record("upgrade", "apt", "vlc")
+    history = cache.history()
+    assert len(history) == 3
+    assert history[0]["action"] == "upgrade"
+    assert history[0]["package"] == "vlc"
+    assert history[2]["version"] == "3.0.20"
+    assert all(row["ok"] == 1 for row in history)
+
+
+def test_history_limit(cache):
+    for i in range(5):
+        cache.record("install", "apt", f"pkg{i}")
+    assert len(cache.history(2)) == 2
+    assert cache.history(2)[0]["package"] == "pkg4"
+
+
+def test_undo_target_skips_undone_and_upgrades(cache):
+    cache.record("install", "apt", "vlc")
+    cache.record("install", "apt", "git")
+    cache.record("upgrade", "apt", "git")
+    target = cache.undo_target()
+    assert target["package"] == "git"
+    assert target["action"] == "install"
+
+    cache.mark_undone(target["id"])
+    assert cache.undo_target()["package"] == "vlc"
+
+    cache.mark_undone(cache.undo_target()["id"])
+    assert cache.undo_target() is None

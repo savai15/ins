@@ -536,3 +536,186 @@ def test_upgrade_dry_run_json(fake_env, capsys):
     assert payload["packages"] == [
         {"name": "vlc", "source": "fake", "version": "3.0.20", "available": "3.0.21"}
     ]
+
+
+def test_history_records_transactions(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    cli.main(["-r", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["history"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "install" in out
+    assert "remove" in out
+    assert "vlc" in out
+    assert "fake" in out
+
+
+def test_history_empty(fake_env, capsys):
+    rc = cli.main(["history"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "no transactions recorded yet" in out
+
+
+def test_history_limit(fake_env, capsys):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    rc = cli.main(["history", "1"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "install" in out
+    assert "remove" not in out
+
+
+def test_history_invalid_size(fake_env, capsys):
+    rc = cli.main(["history", "abc"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "invalid history size" in err
+
+
+def test_history_json(fake_env, capsys):
+    import json as _json
+
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["history", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["history"][0]["action"] == "install"
+    assert payload["history"][0]["package"] == "vlc"
+    assert payload["history"][0]["version"] == "3.0.20"
+
+
+def test_undo_removes_last_install(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "git", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["undo", "-y"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "undid install of git from fake" in out
+    installed = set(Cache(tmp_path / "cache.db").get_installed("fake"))
+    assert installed == {("fake", "vlc", "3.0.20")}
+
+
+def test_undo_reinstalls_last_remove(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    cli.main(["-r", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["undo", "-y"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "undid remove of vlc from fake" in out
+    assert Cache(tmp_path / "cache.db").get_installed("fake") == [("fake", "vlc", "3.0.20")]
+
+
+def test_undo_guards_install_state_change(fake_env, capsys):
+    from ins.adapters.fake_adapter import FakeAdapter
+
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    FakeAdapter("fake").remove("vlc")
+
+    rc = cli.main(["undo", "-y"])
+    err = capsys.readouterr().err
+
+    assert rc == 1
+    assert "cannot undo: 'vlc' is no longer installed" in err
+
+
+def test_undo_guards_remove_state_change(fake_env, capsys):
+    from ins.adapters.fake_adapter import FakeAdapter
+
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    cli.main(["-r", "vlc", "-y"])
+    capsys.readouterr()
+    FakeAdapter("fake").install("vlc")
+
+    rc = cli.main(["undo", "-y"])
+    err = capsys.readouterr().err
+
+    assert rc == 1
+    assert "cannot undo: 'vlc' is still installed" in err
+
+
+def test_undo_nothing_to_undo(fake_env, capsys):
+    rc = cli.main(["undo"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "nothing to undo" in out
+
+
+def test_undo_confirm_denied(fake_env, capsys, monkeypatch, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    monkeypatch.setattr("builtins.input", lambda prompt: "n")
+
+    rc = cli.main(["undo"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "skipped" in out
+    assert Cache(tmp_path / "cache.db").get_installed("fake") == [("fake", "vlc", "3.0.20")]
+
+
+def test_quiet_suppresses_success_messages(fake_env, capsys):
+    rc = cli.main(["-i", "vlc", "-y", "-q"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert out == ""
+
+
+def test_quiet_keeps_errors(fake_env, capsys):
+    rc = cli.main(["-i", "zzz-not-here", "-y", "-q"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "not found" in err
+
+
+def test_no_progress_still_installs(fake_env, capsys, tmp_path):
+    rc = cli.main(["-i", "vlc", "-y", "--no-progress"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "installed vlc from fake" in out
+    assert Cache(tmp_path / "cache.db").get_installed("fake") == [("fake", "vlc", "3.0.20")]
+
+
+def test_doctor_json(fake_env, capsys):
+    import json as _json
+    from ins.adapters.fake_adapter import FakeAdapter
+
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    FakeAdapter("fake2").install("vlc")
+
+    rc = cli.main(["doctor", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["duplicates"][0]["name"] == "vlc"
+    assert set(payload["duplicates"][0]["sources"]) == {"fake", "fake2"}
+    assert payload["sources"]["detected"] == ["fake", "fake2"]
+
+
+def test_update_json(fake_env, capsys):
+    import json as _json
+
+    rc = cli.main(["-u", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["total"] == 6
+    assert payload["sources"] == {"fake": 3, "fake2": 3}
+    assert payload["failed"] == []

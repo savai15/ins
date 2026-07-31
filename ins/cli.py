@@ -89,6 +89,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="machine-readable JSON output (search, info)",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what would change without changing anything",
+    )
+    parser.add_argument(
         "command", nargs="?", choices=("doctor", "info", "export", "bundle"),
         help="doctor: scan for duplicate installs across sources; "
              "info <pkg>: detailed view of a package; "
@@ -304,6 +309,8 @@ def cmd_install(args: argparse.Namespace) -> int:
         return 1
     engine = SearchEngine(adapters, cache=cache, ttl=config.cache.ttl_seconds)
     rc = 0
+    preview_lines: list[str] = []
+    preview_rows: list[dict] = []
     for name in names:
         try:
             results = engine.search(name, sources=[a.name for a in adapters])
@@ -317,7 +324,30 @@ def cmd_install(args: argparse.Namespace) -> int:
             print(f"error: '{name}' not found in any source", file=sys.stderr)
             rc = 1
             continue
+        if args.dry_run:
+            info = target.primary
+            if target.any_installed:
+                preview_lines.append(f"'{info.name}' is already installed (via {info.source}) — no action")
+            else:
+                size = f" ({info.size_human})" if info.size else ""
+                preview_lines.append(f"would install {info.name} from {info.source}{size}")
+            preview_rows.append(
+                {
+                    "name": info.name,
+                    "source": info.source,
+                    "version": info.version,
+                    "size": info.size,
+                    "installed": target.any_installed,
+                }
+            )
+            continue
         rc |= _install_group(target, adapters, cache, args)
+    if args.dry_run:
+        if args.json:
+            print(json.dumps({"dry_run": True, "action": "install", "packages": preview_rows}, indent=2))
+        else:
+            for line in preview_lines:
+                print(line)
     return rc
 
 
@@ -326,6 +356,8 @@ def cmd_remove(args: argparse.Namespace) -> int:
     if not names:
         print("error: remove requires at least one package name", file=sys.stderr)
         return 2
+    lines: list[str] = []
+    rows: list[dict] = []
     config, adapters, cache, errors = _build_context(args)
     if errors:
         print(f"error: {'; '.join(errors)}", file=sys.stderr)
@@ -366,6 +398,13 @@ def cmd_remove(args: argparse.Namespace) -> int:
             print(f"error: '{name}' is not installed (or not found)", file=sys.stderr)
             rc = 1
             continue
+        if args.dry_run:
+            version = f" ({target.version})" if target.version else ""
+            lines.append(f"would remove {target.name} from {target.source}{version}")
+            rows.append(
+                {"name": target.name, "source": target.source, "version": target.version}
+            )
+            continue
         if not _confirm(f"Remove '{target.name}' from {target.source}? [y/N] ", args):
             print(f"skipped {target.name}")
             continue
@@ -384,6 +423,12 @@ def cmd_remove(args: argparse.Namespace) -> int:
             cache.invalidate(package_id=target.id, source=target.source)
             cache.mark_removed(target.source, target.id)
         print(f"removed {target.name} from {target.source}")
+    if args.dry_run:
+        if args.json:
+            print(json.dumps({"dry_run": True, "action": "remove", "packages": rows}, indent=2))
+        else:
+            for line in lines:
+                print(line)
     return rc
 
 
@@ -395,6 +440,23 @@ def cmd_update(args: argparse.Namespace) -> int:
     if not adapters:
         print("error: no package sources detected on this system", file=sys.stderr)
         return 1
+    if args.dry_run:
+        payload: dict[str, int] = {}
+        for adapter in adapters:
+            try:
+                count = len(adapter.outdated())
+            except AdapterError:
+                count = 0
+            payload[adapter.name] = count
+            if args.json:
+                continue
+            if count:
+                print(f"would update {count} package(s) via {adapter.name}")
+            else:
+                print(f"{adapter.name}: up to date")
+        if args.json:
+            print(json.dumps({"dry_run": True, "action": "update", "sources": payload}, indent=2))
+        return 0
     console = Console()
     total = 0
     sources_ok: list[str] = []
@@ -497,6 +559,7 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
         return 1
     engine = SearchEngine(adapters, cache=cache, ttl=config.cache.ttl_seconds)
     rc = 0
+    rows: list[dict] = []
     for name in names:
         target = None
         adapter = None
@@ -528,6 +591,25 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
             print(f"error: '{name}' is not installed (or not found)", file=sys.stderr)
             rc = 1
             continue
+        if args.dry_run:
+            available = ""
+            try:
+                for up in adapter.outdated():
+                    if up.id == target.id:
+                        available = up.available
+                        break
+            except AdapterError:
+                pass
+            rows.append(
+                {"name": target.name, "source": target.source, "version": target.version, "available": available}
+            )
+            if args.json:
+                continue
+            if available:
+                print(f"would upgrade {target.name} from {target.source} ({target.version or '?'} -> {available})")
+            else:
+                print(f"would upgrade {target.name} from {target.source}")
+            continue
         if not _confirm(f"Upgrade '{target.name}' from {target.source}? [y/N] ", args):
             print(f"skipped {target.name}")
             continue
@@ -545,6 +627,8 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
             cache.invalidate(package_id=target.id, source=target.source)
             cache.mark_installed(target.source, target.id, "")
         print(f"upgraded {target.name} from {target.source}")
+    if args.dry_run and args.json:
+        print(json.dumps({"dry_run": True, "action": "upgrade", "packages": rows}, indent=2))
     return rc
 
 

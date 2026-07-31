@@ -25,9 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ins bundle install <file>` — install missing packages with confirm prompts
 - Interactive picker — bare `ins` on a terminal opens a type-to-filter,
   arrow-key search/install UI (rich Live, termios/msvcrt raw keys)
+- `--dry-run` — transaction previews for `-i`, `-r`, `-u`, and `-U`
+  (versions, sizes, per-source update counts; `--json` supported)
 
 ### Planned
-- `--dry-run` transaction previews for install/remove/update
 - Install/remove transaction history with undo
 - Extended `ins -u`: pipx, uv, rustup, fwupd, and custom commands from config
 - `-q/--quiet`, `--no-progress`, JSON output for doctor/update

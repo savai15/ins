@@ -430,3 +430,109 @@ def test_bundle_unknown_action(fake_env, capsys):
     err = capsys.readouterr().err
     assert rc == 2
     assert "check|install" in err
+
+
+def test_install_dry_run_changes_nothing(fake_env, capsys, tmp_path):
+    rc = cli.main(["-i", "vlc", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "would install vlc from fake" in out
+    assert "24.3 MB" in out
+    assert Cache(tmp_path / "cache.db").get_installed("fake") == []
+
+
+def test_install_dry_run_unknown_package(fake_env, capsys):
+    rc = cli.main(["-i", "zzz-not-here", "--dry-run"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "not found" in err
+
+
+def test_install_dry_run_already_installed(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    rc = cli.main(["-i", "vlc", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "already installed" in out
+    assert Cache(tmp_path / "cache.db").get_installed("fake") == [("fake", "vlc", "3.0.20")]
+
+
+def test_install_dry_run_json(fake_env, capsys):
+    import json as _json
+
+    rc = cli.main(["-i", "vlc", "--dry-run", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["dry_run"] is True
+    assert payload["action"] == "install"
+    assert payload["packages"] == [
+        {"name": "vlc", "source": "fake", "version": "3.0.20", "size": 25432064, "installed": False}
+    ]
+
+
+def test_remove_dry_run_changes_nothing(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    rc = cli.main(["-r", "vlc", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "would remove vlc from fake (3.0.20)" in out
+    assert Cache(tmp_path / "cache.db").get_installed("fake") == [("fake", "vlc", "3.0.20")]
+
+
+def test_remove_dry_run_not_installed(fake_env, capsys):
+    rc = cli.main(["-r", "vlc", "--dry-run"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "not installed" in err
+
+
+def test_update_dry_run_lists_counts(fake_env, capsys):
+    rc = cli.main(["-u", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "fake: up to date" in out
+    assert "fake2: up to date" in out
+
+
+def test_update_dry_run_counts_outdated(fake_env, capsys):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    rc = cli.main(["-u", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "would update 1 package(s) via fake" in out
+
+
+def test_update_dry_run_json(fake_env, capsys):
+    import json as _json
+
+    rc = cli.main(["-u", "--dry-run", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["dry_run"] is True
+    assert payload["action"] == "update"
+    assert payload["sources"] == {"fake": 0, "fake2": 0}
+
+
+def test_upgrade_dry_run_shows_versions(fake_env, capsys):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    rc = cli.main(["-U", "vlc", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "would upgrade vlc from fake (3.0.20 -> 3.0.21)" in out
+
+
+def test_upgrade_dry_run_json(fake_env, capsys):
+    import json as _json
+
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    rc = cli.main(["-U", "vlc", "--dry-run", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["packages"] == [
+        {"name": "vlc", "source": "fake", "version": "3.0.20", "available": "3.0.21"}
+    ]

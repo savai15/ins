@@ -21,6 +21,8 @@ detection, and per-package detail views across every source on your system.
 - **Safe install/remove** — `pkexec` with a `sudo` fallback, live progress
   from the real package-manager output, confirm-before-install with sizes
   (`-y` skips prompts for scripting).
+- **`--dry-run`** — see exactly what install/remove/update/upgrade would do
+  (versions, sizes, per-source counts) without touching the system.
 - **`ins doctor`** — flags apps installed twice (e.g. `vlc` via apt *and*
   flatpak) and offers to clean up.
 - **`ins info`** — license, homepage, size, version, and install state per
@@ -140,6 +142,13 @@ $ ins -U vlc -y
 upgraded vlc from fake
 ```
 
+Preview before touching anything (works for `-i`, `-r`, `-u`, `-U`, with `--json`):
+
+```text
+$ ins -i vlc --dry-run
+would install vlc from fake (24.3 MB)
+```
+
 Provision a machine from a manifest:
 
 ```text
@@ -209,7 +218,8 @@ $ ins -s vlc --json
 | `ins info <pkg>`    | detail view: license, homepage, size per source     |
 | `ins doctor`        | find + resolve duplicate installs                   |
 | `--s <source>`      | restrict any action to specific sources             |
-| `--json`            | machine-readable output (search, info, list, outdated, bundle check) |
+| `--dry-run`         | preview install/remove/update/upgrade without changing anything |
+| `--json`            | machine-readable output (search, info, list, outdated, bundle check, dry-run) |
 | `-y / --yes`        | assume yes (scripting)                              |
 
 ## Supported sources
@@ -253,7 +263,7 @@ max_entries = 5000
 ```bash
 git clone https://github.com/savai15/ins && cd ins
 pip install -e ".[dev]"
-pytest -q        # 214 tests, all subprocess calls stubbed with real Linux output
+pytest -q        # 225 tests, all subprocess calls stubbed with real Linux output
 ```
 
 The test suite replays *real* captured package-manager output

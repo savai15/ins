@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+
+# local planning documents (never publish)
+summary.txt
+Executive Summary.pdf
+ROADMAP.md

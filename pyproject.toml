@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ins"
+version = "0.1.0"
+description = "A universal CLI package search/install tool for Linux, unifying apt, dnf, pacman, zypper, flatpak, snap, nix, and apk"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Savai" }]
+keywords = ["package-manager", "cli", "apt", "flatpak", "snap", "linux"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: System :: Software Distribution",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "rich>=13.0",
+    "rapidfuzz>=3.0",
+    "tomli-w>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+icons = ["term-image>=1.2"]
+
+[project.scripts]
+ins = "ins.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ins*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.data-files]
+"share/completions/bash" = ["completions/ins.bash"]
+"share/completions/zsh" = ["completions/ins.zsh"]
+"share/completions/fish" = ["completions/ins.fish"]

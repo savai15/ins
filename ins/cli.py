@@ -24,6 +24,7 @@ from ins.bundle import dumps as manifest_dumps
 from ins.bundle import load_manifest
 from ins.cache import Cache
 from ins.config import Config, DEFAULT_CONFIG_PATH
+from ins.picker import select_package
 from ins.renderer import render_duplicates, render_info, render_list, render_outdated, render_search_results
 from ins.search_engine import NoSourcesError, SearchEngine, normalize_key
 
@@ -149,6 +150,43 @@ def _confirm(prompt: str, args: argparse.Namespace) -> bool:
     except EOFError:
         return False
     return answer.strip().lower() in ("y", "yes")
+
+
+def _stdin_is_tty() -> bool:
+    try:
+        return sys.stdin.isatty()
+    except (ValueError, OSError):
+        return False
+
+
+def _install_group(group, adapters: list, cache, args: argparse.Namespace) -> int:
+    """Confirm and install one GroupedResult via its primary source."""
+    info = group.primary
+    if group.any_installed:
+        print(f"'{info.name}' is already installed (via {info.source})")
+        return 0
+    adapter = _adapter_by_name(adapters, info.source)
+    if adapter is None:
+        print(f"error: source '{info.source}' unavailable", file=sys.stderr)
+        return 1
+    size = f" ({info.size_human})" if info.size else ""
+    if not _confirm(f"Install '{info.name}' from {info.source}{size}? [y/N] ", args):
+        print(f"skipped {info.name}")
+        return 0
+    try:
+        _run_with_progress(
+            lambda cb: adapter.install(info.id, on_progress=cb),
+            info.name,
+            Console(),
+        )
+    except AdapterError as exc:
+        print(f"error: failed to install {info.name}: {exc}", file=sys.stderr)
+        return 1
+    if cache is not None:
+        cache.invalidate(package_id=info.id, source=info.source)
+        cache.mark_installed(info.source, info.id, info.version)
+    print(f"installed {info.name} from {info.source}")
+    return 0
 
 
 def _sanitize_line(line: str) -> str:
@@ -279,33 +317,7 @@ def cmd_install(args: argparse.Namespace) -> int:
             print(f"error: '{name}' not found in any source", file=sys.stderr)
             rc = 1
             continue
-        info = target.primary
-        if target.any_installed:
-            print(f"'{info.name}' is already installed (via {info.source})")
-            continue
-        adapter = _adapter_by_name(adapters, info.source)
-        if adapter is None:
-            print(f"error: source '{info.source}' unavailable", file=sys.stderr)
-            rc = 1
-            continue
-        size = f" ({info.size_human})" if info.size else ""
-        if not _confirm(f"Install '{info.name}' from {info.source}{size}? [y/N] ", args):
-            print(f"skipped {info.name}")
-            continue
-        try:
-            _run_with_progress(
-                lambda cb: adapter.install(info.id, on_progress=cb),
-                info.name,
-                Console(),
-            )
-        except AdapterError as exc:
-            print(f"error: failed to install {info.name}: {exc}", file=sys.stderr)
-            rc = 1
-            continue
-        if cache is not None:
-            cache.invalidate(package_id=info.id, source=info.source)
-            cache.mark_installed(info.source, info.id, info.version)
-        print(f"installed {info.name} from {info.source}")
+        rc |= _install_group(target, adapters, cache, args)
     return rc
 
 
@@ -429,6 +441,24 @@ def cmd_list(args: argparse.Namespace) -> int:
         return 0
     render_list(Console(), installed)
     return 0
+
+
+def cmd_interactive(args: argparse.Namespace) -> int:
+    """Bare `ins` on a terminal: type-to-filter picker, enter installs."""
+    config, adapters, cache, errors = _build_context(args)
+    if errors:
+        print(f"error: {'; '.join(errors)}", file=sys.stderr)
+        return 2
+    if not adapters:
+        print("error: no package sources detected on this system", file=sys.stderr)
+        return 1
+    engine = SearchEngine(adapters, cache=cache, ttl=config.cache.ttl_seconds)
+    console = Console()
+    console.print("[dim]press enter to install, ctrl-c to quit[/dim]")
+    group = select_package(engine, console)
+    if group is None:
+        return 0
+    return _install_group(group, adapters, cache, args)
 
 
 def cmd_outdated(args: argparse.Namespace) -> int:
@@ -885,6 +915,8 @@ def dispatch(args: argparse.Namespace) -> int:
         return cmd_outdated(args)
     if "upgrade" in chosen:
         return cmd_upgrade(args)
+    if _stdin_is_tty():
+        return cmd_interactive(args)
     print(
         "error: no action given — use -s/--search, -i/--install, -r/--remove, "
         "-u/--update, -l/--list, -o/--outdated, -U/--upgrade, "

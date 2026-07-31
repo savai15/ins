@@ -16,6 +16,8 @@ detection, and per-package detail views across every source on your system.
 - **Unified search** — parallel queries with typo tolerance
   (`ins -s vcl` still finds VLC), deduplicated and ranked by relevance +
   popularity, capped at 50 results.
+- **Interactive picker** — bare `ins` on a terminal opens a type-to-filter,
+  arrow-key search/install UI (ctrl-c to quit).
 - **Safe install/remove** — `pkexec` with a `sudo` fallback, live progress
   from the real package-manager output, confirm-before-install with sizes
   (`-y` skips prompts for scripting).
@@ -69,6 +71,17 @@ cp /usr/share/completions/fish/ins.fish ~/.config/fish/completions/
 ```
 
 ## Quick start
+
+Just `ins` on a terminal — type to filter, arrows to move, enter to install:
+
+```text
+$ ins
+▸ vlc [fake] 3.0.20          VLC media player - the portable version
+  git [fake] 2.45.2           fast, scalable, distributed revision control
+type to filter · ↑/↓ move · enter install · ctrl-c quit
+```
+
+Or search directly:
 
 ```text
 $ ins -s vlc
@@ -182,6 +195,7 @@ $ ins -s vlc --json
 
 | Command             | What it does                                        |
 | ------------------- | --------------------------------------------------- |
+| `ins`               | interactive type-to-filter search/install picker    |
 | `ins -s <q>`        | search all sources, merged + ranked                 |
 | `ins -i <pkg>...`   | install one or more packages (`-y` to skip prompt)  |
 | `ins -r <pkg>...`   | remove one or more packages                         |
@@ -239,7 +253,7 @@ max_entries = 5000
 ```bash
 git clone https://github.com/savai15/ins && cd ins
 pip install -e ".[dev]"
-pytest -q        # 204 tests, all subprocess calls stubbed with real Linux output
+pytest -q        # 214 tests, all subprocess calls stubbed with real Linux output
 ```
 
 The test suite replays *real* captured package-manager output

@@ -25,6 +25,7 @@ from ins.renderer import render_duplicates, render_info, render_search_results
 from ins.search_engine import NoSourcesError, SearchEngine, normalize_key
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+ProgressCallback = Callable[[str], None]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -86,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _build_context(args: argparse.Namespace) -> tuple[Config, list, Cache | None, list[str]]:
     config = Config.load()
     adapters, errors = _load_adapters(config, args.sources)
-    cache = Cache(enabled=config.cache.enabled)
+    cache = Cache(enabled=config.cache.enabled, max_entries=config.cache.max_entries)
     return config, adapters, cache, errors
 
 
@@ -132,12 +133,8 @@ def _sanitize_line(line: str) -> str:
     return text[:72]
 
 
-def _run_with_progress(runner, name: str, console: Console):
-    """Run `runner(on_line)` while surfacing output lines in a Progress bar.
-
-    `runner` must accept the progress callback (as `on_progress=...`) and may
-    accept None to skip streaming (for adapters without callback support).
-    """
+def _run_with_progress(runner: Callable[[ProgressCallback], object], name: str, console: Console) -> object:
+    """Run `runner(on_line)` while surfacing output lines in a Progress bar."""
     progress = Progress(console=console)
     task = progress.add_task(f"[dim]{name}[/dim]", total=None)
     last_line = ""
@@ -150,10 +147,7 @@ def _run_with_progress(runner, name: str, console: Console):
             progress.update(task, description=f"[dim]{text}[/dim]")
 
     with progress:
-        try:
-            return runner(on_line)
-        except TypeError:
-            return runner(None)
+        return runner(on_line)
 
 
 def _erase_animation(console: Console, name: str) -> None:
@@ -275,7 +269,7 @@ def cmd_install(args: argparse.Namespace) -> int:
             continue
         try:
             _run_with_progress(
-                lambda cb: adapter.install(info.id, on_progress=cb) if cb else adapter.install(info.id),
+                lambda cb: adapter.install(info.id, on_progress=cb),
                 info.name,
                 Console(),
             )
@@ -340,7 +334,7 @@ def cmd_remove(args: argparse.Namespace) -> int:
             continue
         try:
             _run_with_progress(
-                lambda cb: adapter.remove(target.id, on_progress=cb) if cb else adapter.remove(target.id),
+                lambda cb: adapter.remove(target.id, on_progress=cb),
                 target.name,
                 Console(),
             )
@@ -371,7 +365,7 @@ def cmd_update(args: argparse.Namespace) -> int:
     for adapter in adapters:
         try:
             count = _run_with_progress(
-                lambda cb: adapter.update(on_progress=cb) if cb else adapter.update(),
+                lambda cb: adapter.update(on_progress=cb),
                 adapter.name,
                 console,
             )
@@ -560,7 +554,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     rc = 0
     for _key, infos in duplicates:
-        keep_source = sorted({i.source for i in infos})[0]
+        ordered = [a.name for a in adapters]
+        keep_source = min(
+            (i.source for i in infos),
+            key=lambda s: ordered.index(s) if s in ordered else 10**9,
+        )
         for info in infos:
             if info.source == keep_source:
                 continue
@@ -571,11 +569,16 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 print(f"skipped {info.name} from {info.source}")
                 continue
             try:
-                adapter.remove(info.id)
+                _run_with_progress(
+                    lambda cb: adapter.remove(info.id, on_progress=cb),
+                    info.name,
+                    Console(),
+                )
             except AdapterError as exc:
                 print(f"error: failed to remove {info.name} from {info.source}: {exc}", file=sys.stderr)
                 rc = 1
                 continue
+            _erase_animation(Console(), info.name)
             if cache is not None:
                 cache.invalidate(package_id=info.id, source=info.source)
                 cache.mark_removed(info.source, info.id)

@@ -52,8 +52,15 @@ def _like_escape(value: str) -> str:
 class Cache:
     """Fail-soft cache: any storage error degrades to no caching, never breaks the CLI."""
 
-    def __init__(self, path: Path | str | None = None, *, enabled: bool = True):
+    def __init__(
+        self,
+        path: Path | str | None = None,
+        *,
+        enabled: bool = True,
+        max_entries: int = 5000,
+    ):
         self._path = Path(path) if path else default_db_path()
+        self._max_entries = max(1, max_entries)
         self._ok = False
         if not enabled:
             return
@@ -81,6 +88,7 @@ class Cache:
         return {
             "enabled": self._ok,
             "entries": entries,
+            "max_entries": self._max_entries,
             "db_size": size,
             "path": str(self._path),
         }
@@ -135,11 +143,23 @@ class Cache:
                     " VALUES(?, ?, ?, ?)",
                     (source, query, data, time.time()),
                 )
+                self._prune(conn)
 
         try:
             self._retry(op)
         except sqlite3.Error:
             self._ok = False
+
+    def _prune(self, conn: sqlite3.Connection) -> None:
+        """Drop the oldest rows beyond `max_entries`, newest-first."""
+        conn.execute(
+            "DELETE FROM search_cache WHERE rowid IN ("
+            "SELECT rowid FROM ("
+            "SELECT rowid, ROW_NUMBER() OVER (ORDER BY fetched_at DESC) AS rn"
+            " FROM search_cache"
+            ") WHERE rn > ?)",
+            (self._max_entries,),
+        )
 
     def get_results(self, source: str, query: str) -> tuple[list[AppInfo], float] | None:
         """(infos, fetched_at) for the entry, or None."""

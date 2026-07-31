@@ -140,7 +140,7 @@ def fake_env(monkeypatch, tmp_path):
     monkeypatch.setenv("INS_FAKE", "1")
     monkeypatch.setattr(
         "ins.cli.Cache",
-        lambda enabled: Cache(tmp_path / "cache.db", enabled=enabled),
+        lambda enabled, max_entries=5000: Cache(tmp_path / "cache.db", enabled=enabled, max_entries=max_entries),
     )
     monkeypatch.setattr("ins.config.Config.load", lambda *a, **kw: Config())
     return tmp_path

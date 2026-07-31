@@ -59,6 +59,23 @@ def test_doctor_respects_yes_flag_not_auto_removing(dup_env, capsys):
     assert "removed vlc from fake2" in out
 
 
+def test_doctor_keeps_highest_priority_source(dup_env, capsys, monkeypatch):
+    import ins.adapters.registry as registry
+
+    original_detect = registry.detect_sources
+
+    def reordered(config):
+        adapters = original_detect(config)
+        return sorted(adapters, key=lambda a: 0 if a.name == "fake2" else 1)
+
+    monkeypatch.setattr("ins.adapters.registry.detect_sources", reordered)
+    rc = cli.main(["doctor", "-y"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "removed vlc from fake" in out
+    assert "removed vlc from fake2" not in out
+
+
 def test_doctor_unknown_source_rejected(fake_env, capsys):
     rc = cli.main(["doctor", "--s", "bogus"])
     err = capsys.readouterr().err

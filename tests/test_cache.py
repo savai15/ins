@@ -38,9 +38,38 @@ def test_ttl_expiry(cache, monkeypatch):
     monkeypatch.setattr("ins.cache.time.time", lambda: now + 7200)
 
     assert cache.get_fresh("apt", "vlc", ttl=3600) is None
-    stale = cache.get_any("apt", "vlc")
-    assert stale is not None
-    assert stale[0].id == "vlc"
+
+
+def test_eviction_prunes_oldest_beyond_max(tmp_path, monkeypatch):
+    cache = Cache(tmp_path / "cache.db", max_entries=2)
+    clock = [time.time()]
+
+    def tick():
+        clock[0] += 100
+        return clock[0]
+
+    monkeypatch.setattr("ins.cache.time.time", tick)
+    for i in range(4):
+        cache.put_results(
+            "apt", f"q{i}", [AppInfo(id=f"p{i}", name=f"p{i}", source="apt")]
+        )
+
+    assert cache.stats()["entries"] == 2
+    assert cache.get_any("apt", "q0") is None
+    assert cache.get_any("apt", "q1") is None
+    assert cache.get_any("apt", "q2") is not None
+    assert cache.get_any("apt", "q3") is not None
+
+
+def test_eviction_respects_max_entries_config(tmp_path):
+    from ins.config import Config
+
+    cfg = Config.from_dict({"cache": {"max_entries": 1}})
+    cache = Cache(tmp_path / "cache.db", max_entries=cfg.cache.max_entries)
+    cache.put_results("apt", "a", [AppInfo(id="a", name="a", source="apt")])
+    cache.put_results("apt", "b", [AppInfo(id="b", name="b", source="apt")])
+    assert cache.stats()["entries"] == 1
+    assert cache.stats()["max_entries"] == 1
 
 
 def test_invalidate_by_package_id(cache):

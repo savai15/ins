@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-import ins.cli as cli
+from ins import cli
 from ins.adapters.dnf_adapter import DnfAdapter
 from ins.adapters.pacman_adapter import PacmanAdapter
 from ins.adapters.snap_adapter import SnapAdapter
@@ -59,11 +57,16 @@ def test_info_fuzzy_finds_close_name(fake_env, capsys):
 def test_dnf_info_parses_fields(monkeypatch):
     patch_which(monkeypatch, "ins.adapters.dnf_adapter", ["dnf"])
     routes = [
-        (["dnf", "info", "vlc"], 0,
-         "Name         : vlc\nVersion      : 3.0.20\n"
-         "License      : GPL-2.0-or-later\nURL          : https://www.videolan.org/\n"
-         "Description  : The portable version of VLC media player\n"
-         "               with extra long text\n", ""),
+        (
+            ["dnf", "info", "vlc"], 0,
+            (
+                "Name         : vlc\nVersion      : 3.0.20\n"
+                "License      : GPL-2.0-or-later\nURL          : https://www.videolan.org/\n"
+                "Description  : The portable version of VLC media player\n"
+                "               with extra long text\n"
+            ),
+            "",
+        ),
     ]
     patch_runner(monkeypatch, "ins.adapters.dnf_adapter", routes)
 
@@ -76,10 +79,15 @@ def test_dnf_info_parses_fields(monkeypatch):
 def test_pacman_info_parses_fields(monkeypatch):
     patch_which(monkeypatch, "ins.adapters.pacman_adapter", ["pacman"])
     routes = [
-        (["pacman", "-Si", "vlc"], 0,
-         "Name            : vlc\nVersion         : 3.0.20-2\n"
-         "URL             : https://www.videolan.org/\nLicenses        : GPL-2.0\n"
-         "Description     : Multi-platform multimedia player\n", ""),
+        (
+            ["pacman", "-Si", "vlc"], 0,
+            (
+                "Name            : vlc\nVersion         : 3.0.20-2\n"
+                "URL             : https://www.videolan.org/\nLicenses        : GPL-2.0\n"
+                "Description     : Multi-platform multimedia player\n"
+            ),
+            "",
+        ),
     ]
     patch_runner(monkeypatch, "ins.adapters.pacman_adapter", routes)
 
@@ -92,10 +100,15 @@ def test_pacman_info_parses_fields(monkeypatch):
 def test_zypper_info_parses_license(monkeypatch):
     patch_which(monkeypatch, "ins.adapters.zypper_adapter", ["zypper"])
     routes = [
-        (["zypper", "-n", "info", "vlc"], 0,
-         "Information for package vlc:\n-----------------------------\n"
-         "Repository     : packman\nName           : vlc\n"
-         "License        : GPL-2.0+\n", ""),
+        (
+            ["zypper", "-n", "info", "vlc"], 0,
+            (
+                "Information for package vlc:\n-----------------------------\n"
+                "Repository     : packman\nName           : vlc\n"
+                "License        : GPL-2.0+\n"
+            ),
+            "",
+        ),
     ]
     patch_runner(monkeypatch, "ins.adapters.zypper_adapter", routes)
 
@@ -123,11 +136,10 @@ def test_adapters_without_info_return_none(fake_pair):
 def test_info_missing_details_render_dash(fake_env, capsys):
     from io import StringIO
 
-    from rich.console import Console
-
     from ins.models import AppInfo
     from ins.renderer import render_info
     from ins.search_engine import GroupedResult
+    from rich.console import Console
 
     group = GroupedResult(
         key="x", name="x",

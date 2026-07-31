@@ -8,9 +8,9 @@ import os
 import re
 import sys
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable
 
 from rich.console import Console
 from rich.live import Live
@@ -24,7 +24,7 @@ from ins.bundle import check as check_manifest
 from ins.bundle import dumps as manifest_dumps
 from ins.bundle import load_manifest
 from ins.cache import Cache
-from ins.config import Config, DEFAULT_CONFIG_PATH
+from ins.config import DEFAULT_CONFIG_PATH, Config
 from ins.picker import select_package
 from ins.renderer import render_duplicates, render_info, render_list, render_outdated, render_search_results
 from ins.search_engine import NoSourcesError, SearchEngine, normalize_key
@@ -105,18 +105,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="run actions without the live progress bar",
     )
     parser.add_argument(
-        "command", nargs="?", choices=("doctor", "info", "export", "bundle", "history", "undo"),
+        "--installed",
+        action="store_true",
+        help="(completions) complete installed package names instead of catalog names",
+    )
+    parser.add_argument(
+        "command", nargs="?", choices=("doctor", "info", "export", "bundle", "history", "undo", "completions"),
         help="doctor: scan for duplicate installs across sources; "
              "info <pkg>: detailed view of a package; "
              "export [file]: write installed packages as a TOML manifest; "
              "bundle check|install <file>: verify or apply a manifest; "
              "history [n]: show recent transactions; "
-             "undo: reverse the last install/remove",
+             "undo: reverse the last install/remove; "
+             "completions <bash|zsh|fish|packages>: print a completion script or package names",
     )
     parser.add_argument(
         "subject", nargs="?",
         metavar="PKG",
-        help="package name for `ins info`; check/install for `ins bundle`; count for `ins history`",
+        help="package name for `ins info`; check/install for `ins bundle`; count for `ins history`; shell or `packages` for `ins completions`",
     )
     parser.add_argument(
         "bundle_file", nargs="?",
@@ -431,7 +437,11 @@ def cmd_remove(args: argparse.Namespace) -> int:
             _say(args, f"skipped {target.name}")
             continue
         try:
-            _run_action(args, lambda cb: adapter.remove(target.id, on_progress=cb), target.name)
+            _run_action(
+                args,
+                lambda cb, adapter=adapter, target=target: adapter.remove(target.id, on_progress=cb),
+                target.name,
+            )
         except AdapterError as exc:
             print(f"error: failed to remove {target.name}: {exc}", file=sys.stderr)
             rc = 1
@@ -452,13 +462,17 @@ def cmd_remove(args: argparse.Namespace) -> int:
 
 
 def cmd_update(args: argparse.Namespace) -> int:
-    config, adapters, cache, errors = _build_context(args)
+    config, adapters, _cache, errors = _build_context(args)
     if errors:
         print(f"error: {'; '.join(errors)}", file=sys.stderr)
         return 2
     if not adapters:
         print("error: no package sources detected on this system", file=sys.stderr)
         return 1
+    from ins.updaters import CustomUpdater, detect_updaters
+
+    # updaters are skipped when --s restricts the run to specific sources
+    updaters = [] if args.sources else detect_updaters(config.updaters)
     if args.dry_run:
         payload: dict[str, int] = {}
         for adapter in adapters:
@@ -473,6 +487,10 @@ def cmd_update(args: argparse.Namespace) -> int:
                 print(f"would update {count} package(s) via {adapter.name}")
             else:
                 print(f"{adapter.name}: up to date")
+        for updater in updaters:
+            payload[updater.name] = -1  # count unknown until run
+            if not args.json:
+                print(f"would update via {updater.name}")
         if args.json:
             print(json.dumps({"dry_run": True, "action": "update", "sources": payload}, indent=2))
         return 0
@@ -483,7 +501,12 @@ def cmd_update(args: argparse.Namespace) -> int:
     failed: list[str] = []
     for adapter in adapters:
         try:
-            count = _run_action(args, lambda cb: adapter.update(on_progress=cb), adapter.name, console)
+            count = _run_action(
+                args,
+                lambda cb, adapter=adapter: adapter.update(on_progress=cb),
+                adapter.name,
+                console,
+            )
         except AdapterError as exc:
             print(f"error: {adapter.name}: {exc}", file=sys.stderr)
             failed.append(adapter.name)
@@ -491,8 +514,30 @@ def cmd_update(args: argparse.Namespace) -> int:
         total += int(count or 0)
         counts[adapter.name] = int(count or 0)
         sources_ok.append(adapter.name)
+    updater_counts: dict[str, int] = {}
+    for updater in updaters:
+        try:
+            count = _run_action(
+                args,
+                lambda cb, updater=updater: updater.update(on_progress=cb),
+                updater.name,
+                console,
+            )
+        except AdapterError as exc:
+            print(f"error: {updater.name}: {exc}", file=sys.stderr)
+            failed.append(updater.name)
+            continue
+        updater_counts[updater.name] = int(count or 0)
+        if args.json:
+            continue
+        if count:
+            _say(args, f"{updater.name}: {count} update(s)")
+        elif not isinstance(updater, CustomUpdater):
+            _say(args, f"{updater.name}: up to date")
+        else:
+            _say(args, f"{updater.name}: ran")
     if args.json:
-        print(json.dumps({"sources": counts, "failed": failed, "total": total}, indent=2))
+        print(json.dumps({"sources": counts, "updaters": updater_counts, "failed": failed, "total": total}, indent=2))
         return 1 if failed else 0
     if sources_ok:
         if total:
@@ -510,7 +555,7 @@ def cmd_update(args: argparse.Namespace) -> int:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    config, adapters, cache, errors = _build_context(args)
+    _config, adapters, _cache, errors = _build_context(args)
     if errors:
         print(f"error: {'; '.join(errors)}", file=sys.stderr)
         return 2
@@ -545,7 +590,7 @@ def cmd_interactive(args: argparse.Namespace) -> int:
 
 
 def cmd_outdated(args: argparse.Namespace) -> int:
-    config, adapters, cache, errors = _build_context(args)
+    _config, adapters, _cache, errors = _build_context(args)
     if errors:
         print(f"error: {'; '.join(errors)}", file=sys.stderr)
         return 2
@@ -635,7 +680,11 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
             _say(args, f"skipped {target.name}")
             continue
         try:
-            _run_action(args, lambda cb: adapter.upgrade(target.id, on_progress=cb), target.name)
+            _run_action(
+                args,
+                lambda cb, adapter=adapter, target=target: adapter.upgrade(target.id, on_progress=cb),
+                target.name,
+            )
         except AdapterError as exc:
             print(f"error: failed to upgrade {target.name}: {exc}", file=sys.stderr)
             rc = 1
@@ -850,7 +899,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 _say(args, f"skipped {info.name} from {info.source}")
                 continue
             try:
-                _run_action(args, lambda cb: adapter.remove(info.id, on_progress=cb), info.name)
+                _run_action(
+                    args,
+                    lambda cb, adapter=adapter, info=info: adapter.remove(info.id, on_progress=cb),
+                    info.name,
+                )
             except AdapterError as exc:
                 print(f"error: failed to remove {info.name} from {info.source}: {exc}", file=sys.stderr)
                 rc = 1
@@ -867,7 +920,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 # -------------------------------------------------------- bundle (ins export / ins bundle)
 
 def cmd_history(args: argparse.Namespace) -> int:
-    config, adapters, cache, errors = _build_context(args)
+    _config, _adapters, cache, errors = _build_context(args)
     if errors:
         print(f"error: {'; '.join(errors)}", file=sys.stderr)
         return 2
@@ -899,7 +952,7 @@ def cmd_history(args: argparse.Namespace) -> int:
 
 
 def cmd_undo(args: argparse.Namespace) -> int:
-    config, adapters, cache, errors = _build_context(args)
+    _config, adapters, cache, errors = _build_context(args)
     if errors:
         print(f"error: {'; '.join(errors)}", file=sys.stderr)
         return 2
@@ -957,7 +1010,7 @@ def cmd_undo(args: argparse.Namespace) -> int:
 
 
 def cmd_export(args: argparse.Namespace, target: str | None) -> int:
-    config, adapters, cache, errors = _build_context(args)
+    _config, adapters, _cache, errors = _build_context(args)
     if errors:
         print(f"error: {'; '.join(errors)}", file=sys.stderr)
         return 2
@@ -1022,7 +1075,12 @@ def _bundle_install(args: argparse.Namespace, report: dict, adapters: list, cach
             print(f"skipped {pkg}")
             continue
         try:
-            _run_action(args, lambda cb: adapter.install(pkg, on_progress=cb), pkg, console)
+            _run_action(
+                args,
+                lambda cb, adapter=adapter, pkg=pkg: adapter.install(pkg, on_progress=cb),
+                pkg,
+                console,
+            )
         except AdapterError as exc:
             print(f"error: failed to install {pkg}: {exc}", file=sys.stderr)
             rc = 1
@@ -1053,7 +1111,7 @@ def cmd_bundle(args: argparse.Namespace, action: str | None, file_arg: str | Non
     except (ValueError, OSError) as exc:
         print(f"error: invalid manifest {file_arg}: {exc}", file=sys.stderr)
         return 2
-    config, adapters, cache, errors = _build_context(args)
+    _config, adapters, cache, errors = _build_context(args)
     if errors:
         print(f"error: {'; '.join(errors)}", file=sys.stderr)
         return 2
@@ -1065,6 +1123,55 @@ def cmd_bundle(args: argparse.Namespace, action: str | None, file_arg: str | Non
     if action == "check":
         return _bundle_report(args, report)
     return _bundle_install(args, report, adapters, cache)
+
+
+# ------------------------------------------------------ completions (ins completions)
+
+def _completion_script(shell: str) -> Path:
+    """Locate a completion script: repo checkout first, installed data dirs as fallback."""
+    here = Path(__file__).resolve().parent.parent
+    for base in (here / "completions", Path(sys.prefix) / "share" / "completions"):
+        candidate = base / f"ins.{shell}"
+        if candidate.is_file():
+            return candidate
+    return here / "completions" / f"ins.{shell}"
+
+
+def cmd_completions(args: argparse.Namespace) -> int:
+    """`ins completions <bash|zsh|fish|packages> [prefix]`."""
+    shell = args.subject
+    if shell in ("bash", "zsh", "fish"):
+        try:
+            print(_completion_script(shell).read_text(encoding="utf-8"), end="")
+        except OSError:
+            print(f"error: completion script for {shell} not found", file=sys.stderr)
+            return 1
+        return 0
+    if shell != "packages":
+        print("error: `ins completions` expects bash, zsh, fish, or packages", file=sys.stderr)
+        return 2
+    config, adapters, cache, errors = _build_context(args)
+    if errors:
+        print(f"error: {'; '.join(errors)}", file=sys.stderr)
+        return 2
+    if not adapters:
+        return 0
+    prefix = (args.bundle_file or "").strip().lower()
+    names: set[str] = set()
+    if args.installed:
+        for info in _scan_installed(adapters):
+            names.add(info.name or info.id)
+    else:
+        engine = SearchEngine(adapters, cache=cache, ttl=config.cache.ttl_seconds)
+        try:
+            results = engine.search(prefix) if prefix else []
+        except NoSourcesError:
+            results = []
+        names.update(r.name for r in results)
+    ordered = sorted(name for name in names if prefix in name.lower())
+    for name in ordered[:50]:
+        print(name)
+    return 0
 
 
 # ------------------------------------------------------------- dispatch
@@ -1083,6 +1190,8 @@ def dispatch(args: argparse.Namespace) -> int:
         chosen.append("history")
     if args.command == "undo":
         chosen.append("undo")
+    if args.command == "completions":
+        chosen.append("completions")
     if args.search is not None:
         chosen.append("search")
     if args.install is not None:
@@ -1115,6 +1224,8 @@ def dispatch(args: argparse.Namespace) -> int:
         return cmd_history(args)
     if args.command == "undo":
         return cmd_undo(args)
+    if args.command == "completions":
+        return cmd_completions(args)
     if "search" in chosen:
         return cmd_search(args)
     if "install" in chosen:
@@ -1135,7 +1246,7 @@ def dispatch(args: argparse.Namespace) -> int:
         "error: no action given — use -s/--search, -i/--install, -r/--remove, "
         "-u/--update, -l/--list, -o/--outdated, -U/--upgrade, "
         "or `ins doctor` / `ins info <pkg>` / `ins export` / `ins bundle check|install <file>`"
-        " / `ins history` / `ins undo`",
+        " / `ins history` / `ins undo` / `ins completions <shell|packages>`",
         file=sys.stderr,
     )
     return 2

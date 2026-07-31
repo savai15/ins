@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from ins.adapters.flatpak_adapter import FlatpakAdapter, _human_name
+
 import output_samples as samples
 from conftest import flatpak_routes, patch_runner, patch_which
-
-from ins.adapters.flatpak_adapter import FlatpakAdapter, _human_name
 
 
 def test_is_available(monkeypatch):

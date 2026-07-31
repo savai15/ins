@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-import ins.cli as cli
+from ins import cli
 
 
 def test_search_json_parses(fake_env, capsys):
@@ -34,7 +34,7 @@ def test_search_json_no_results(fake_env, capsys):
 def test_search_json_shows_installed_state(fake_env, capsys):
     cli.main(["-i", "vlc", "-y"])
     capsys.readouterr()
-    rc = cli.main(["-s", "vlc", "--json"])
+    cli.main(["-s", "vlc", "--json"])
     out = capsys.readouterr().out
     assert json.loads(out)["results"][0]["installed"] is True
 

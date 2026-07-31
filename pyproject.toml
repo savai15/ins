@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ins"
-version = "0.1.0"
+version = "0.2.0"
 description = "A universal CLI package search/install tool for Linux, unifying apt, dnf, pacman, zypper, flatpak, snap, nix, and apk"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
 icons = ["term-image>=1.2"]
 
 [project.scripts]
@@ -41,3 +41,17 @@ include-package-data = true
 "share/completions/bash" = ["completions/ins.bash"]
 "share/completions/zsh" = ["completions/ins.zsh"]
 "share/completions/fish" = ["completions/ins.fish"]
+"share/man/man1" = ["docs/ins.1"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["ins", "tests"]
+
+[tool.ruff.lint]
+extend-ignore = [
+    "BLE001",  # optional-backend fallbacks (python-apt, icon rendering) catch broadly
+    "S110",    # silent fallbacks are intentional in adapters
+    "S112",    # list_installed scan skips failing sources on purpose
+    "TRY004",  # bundle manifests use ValueError for parse errors (CLI catches it)
+]

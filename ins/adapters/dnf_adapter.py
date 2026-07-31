@@ -39,7 +39,7 @@ class DnfAdapter(SourceAdapter):
             name = name.strip()
             if not name or not summary:
                 continue
-            if name.startswith("Last metadata") or name.startswith("Name"):
+            if name.startswith(("Last metadata", "Name")):
                 continue
             out.append(
                 AppInfo(

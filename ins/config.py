@@ -28,6 +28,17 @@ class CacheSettings:
 
 
 @dataclass(slots=True)
+class UpdaterSettings:
+    """`ins -u` extras: disabled builtin updaters + custom update commands.
+
+    Custom commands are plain argv lists, e.g. `texlive = ["tlmgr", "update", "--all"]`.
+    """
+
+    disable: list[str] = field(default_factory=list)
+    custom: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class Config:
     """User configuration with sensible defaults.
 
@@ -40,10 +51,15 @@ class Config:
         enabled = true
         ttl_seconds = 3600
         max_entries = 5000
+
+        [updaters]
+        disable = ["fwupd"]
+        custom = { texlive = ["tlmgr", "update", "--all"] }
     """
 
     source_priority: list[str] = field(default_factory=lambda: list(DEFAULT_SOURCE_PRIORITY))
     cache: CacheSettings = field(default_factory=CacheSettings)
+    updaters: UpdaterSettings = field(default_factory=UpdaterSettings)
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:
@@ -62,6 +78,7 @@ class Config:
     def from_dict(cls, data: dict) -> Config:
         sources = data.get("sources", {})
         cache = data.get("cache", {})
+        updaters = data.get("updaters", {})
         priority = sources.get("priority")
         cfg = cls()
         if isinstance(priority, list) and priority:
@@ -73,12 +90,25 @@ class Config:
                 cfg.cache.ttl_seconds = int(cache["ttl_seconds"])
             if "max_entries" in cache:
                 cfg.cache.max_entries = int(cache["max_entries"])
+        if isinstance(updaters, dict):
+            disable = updaters.get("disable")
+            if isinstance(disable, list):
+                cfg.updaters.disable = [str(d) for d in disable]
+            custom = updaters.get("custom")
+            if isinstance(custom, dict):
+                for name, command in custom.items():
+                    if isinstance(command, list) and command:
+                        cfg.updaters.custom[str(name)] = [str(part) for part in command]
         return cfg
 
     def to_dict(self) -> dict:
         return {
             "sources": {"priority": self.source_priority},
             "cache": asdict(self.cache),
+            "updaters": {
+                "disable": self.updaters.disable,
+                "custom": self.updaters.custom,
+            },
         }
 
     def save(self, path: Path | None = None) -> None:

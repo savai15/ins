@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- (nothing yet)
+
+## [0.2.0] - 2026-07-31
+
+### Added
 - `ins -l` / `--list` — installed packages grouped by source (`--json` supported)
 - `ins -o` / `--outdated` — installed → available version table per source,
   parsed from `apt list --upgradable`, `flatpak remote-ls --updates`,
@@ -36,10 +41,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--no-progress` — run without the live progress bar
 - `--json` output for `ins doctor` (duplicates, sources, cache stats) and
   `ins -u` (per-source update counts)
+- Tool updaters in `ins -u` — pipx (`upgrade-all`), uv (`tool upgrade --all`),
+  rustup (`update`), and fwupd (`refresh`; firmware flashing stays interactive)
+  auto-detected alongside package sources; counted per updater
+- Custom updaters from `[updaters.custom]` in the config — any command
+  (`name = ["cmd", "arg", ...]`), reported as "ran" when update counts are
+  unknown; `[updaters] disable = [...]` turns off builtins
+- `ins completions bash|zsh|fish` — print completion scripts on demand
+- `ins completions packages [--installed] <prefix>` — package-name completion
+  source; bash/zsh/fish scripts now complete package names for `-i`, `-s`,
+  `-r`, `-U`, and `info`
+- Man page (`docs/ins.1`, installed to `share/man/man1`)
+- CI — GitHub Actions: pytest on Python 3.11/3.12/3.13 + ruff lint
+- Ruff lint config; the whole codebase now passes `ruff check` clean
 
 ### Planned
-- Extended `ins -u`: pipx, uv, rustup, fwupd, and custom commands from config
-- CI (pytest matrix + lint), man page, package-name shell completions
+- Extended `ins -u`: fwupd device updates, more tool updaters
+- Package-name shell completions for more shells (nushell, elvish)
 
 ## [0.1.0] - 2026-07-31
 

@@ -27,7 +27,11 @@ detection, and per-package detail views across every source on your system.
   flatpak) and offers to clean up.
 - **`ins info`** — license, homepage, size, version, and install state per
   source, in one glance.
-- **`ins -u`** — updates every detected source in sequence with a summary.
+- **`ins -u`** — updates every detected source in sequence with a summary,
+  plus tool updaters: `pipx upgrade-all`, `uv tool upgrade --all`,
+  `rustup update`, `fwupdmgr refresh` (firmware metadata only — flashing is
+  interactive for a reason), and any custom commands from
+  `~/.config/ins/config.toml` (`[updaters] custom = { texlive = ["tlmgr", "update", "--all"] }`).
 - **`ins -l` / `ins -o` / `ins -U <pkg>...`** — list installed packages,
   see which have newer versions available, and upgrade them individually.
 - **`ins export` / `ins bundle`** — declarative provisioning: dump what's
@@ -40,6 +44,9 @@ detection, and per-package detail views across every source on your system.
 - **Offline-friendly** — local SQLite cache with TTL; stale results are marked
   instead of failing when a source is unreachable.
 - **`--json`** — machine-readable output for scripting.
+- **Completions** — `ins completions bash|zsh|fish` prints a completion script,
+  and package names auto-complete for `-i`/`-r`/`-U`/`info` via
+  `ins completions packages [--installed] <prefix>`.
 - **Pretty** — pastel-colored source tags, aligned tables, spinners, and an
   erase animation on remove.
 
@@ -64,17 +71,24 @@ Optional inline icons in `ins info` (kitty / iTerm2 / WezTerm only):
 pipx inject ins term-image        # or: pip install --user 'ins[icons]'
 ```
 
-Shell completions for bash / zsh / fish ship with the package:
+Shell completions for bash / zsh / fish ship with the package, or print them
+on demand (package names auto-complete for `-i`, `-r`, `-U`, and `info`):
 
 ```bash
 # bash
-echo 'source /usr/share/completions/bash/ins.bash' >> ~/.bashrc
+ins completions bash > ~/.local/share/ins.bash && echo 'source ~/.local/share/ins.bash' >> ~/.bashrc
 
 # zsh
-fpath+=(/usr/share/completions/zsh) && compinit
+ins completions zsh > ~/.zsh/completions/_ins && fpath+=(~/.zsh/completions) && compinit
 
 # fish
-cp /usr/share/completions/fish/ins.fish ~/.config/fish/completions/
+ins completions fish > ~/.config/fish/completions/ins.fish
+```
+
+A man page ships with the package too:
+
+```bash
+man ins
 ```
 
 ## Quick start
@@ -213,7 +227,7 @@ $ ins -s vlc --json
 | `ins -s <q>`        | search all sources, merged + ranked                 |
 | `ins -i <pkg>...`   | install one or more packages (`-y` to skip prompt)  |
 | `ins -r <pkg>...`   | remove one or more packages                         |
-| `ins -u`            | update every detected source's index               |
+| `ins -u`            | update every detected source's index + tool updaters  |
 | `ins -l`            | list installed packages grouped by source          |
 | `ins -o`            | list packages with newer versions available        |
 | `ins -U <pkg>...`   | upgrade installed packages                         |
@@ -224,6 +238,7 @@ $ ins -s vlc --json
 | `ins doctor`        | find + resolve duplicate installs                   |
 | `ins history [n]`   | show the last n install/remove/upgrade transactions (default 20) |
 | `ins undo`          | reverse the last install or remove transaction      |
+| `ins completions <bash\|zsh\|fish\|packages>` | print a completion script or package names |
 | `--s <source>`      | restrict any action to specific sources             |
 | `--dry-run`         | preview install/remove/update/upgrade without changing anything |
 | `--json`            | machine-readable output (search, info, list, outdated, bundle check, doctor, update, dry-run, history) |
@@ -265,6 +280,13 @@ priority = ["apt", "flatpak", "dnf", "pacman", "zypper", "snap", "nix", "apk"]
 enabled = true
 ttl_seconds = 3600
 max_entries = 5000
+
+[updaters]
+# built-in tool updaters to skip: pipx, uv, rustup, fwupd
+disable = ["fwupd"]
+
+# extra update commands run by `ins -u` (name = argv list)
+custom = { texlive = ["tlmgr", "update", "--all"] }
 ```
 
 ## Development
@@ -272,7 +294,8 @@ max_entries = 5000
 ```bash
 git clone https://github.com/savai15/ins && cd ins
 pip install -e ".[dev]"
-pytest -q        # 244 tests, all subprocess calls stubbed with real Linux output
+pytest -q        # 272 tests, all subprocess calls stubbed with real Linux output
+ruff check .     # lint (CI enforces both on Python 3.11/3.12/3.13)
 ```
 
 The test suite replays *real* captured package-manager output

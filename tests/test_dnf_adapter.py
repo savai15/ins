@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from ins.adapters.dnf_adapter import DnfAdapter
+
 import output_samples as samples
 from conftest import patch_runner, patch_which
-
-from ins.adapters.dnf_adapter import DnfAdapter
 
 
 def test_is_available(monkeypatch):

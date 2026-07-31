@@ -11,7 +11,7 @@ import re
 import shutil
 import subprocess
 import time
-from typing import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 
 _VERSION_RE = re.compile(r"^\d+(\.\d+)*(-[a-z0-9]+)*$")
 
@@ -75,12 +75,12 @@ def run(
     try:
         proc = subprocess.run(
             list(cmd),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             env=env,
             timeout=timeout,
             input=input,
+            check=False,
         )
     except subprocess.TimeoutExpired as exc:
         raise TimeoutExpired(cmd, timeout) from exc

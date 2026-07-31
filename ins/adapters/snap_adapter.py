@@ -42,7 +42,7 @@ class SnapAdapter(SourceAdapter):
             if not line.strip():
                 continue
             stripped = line.lstrip()
-            if stripped.startswith("Name") or stripped.startswith("---"):
+            if stripped.startswith(("Name", "---")):
                 continue
             cols = _split_columns(line)
             if len(cols) < 2:

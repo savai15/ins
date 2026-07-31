@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import output_samples as samples
-from conftest import patch_runner, patch_which
-
 from ins.adapters.apk_adapter import ApkAdapter
 from ins.adapters.nix_adapter import NixAdapter
 from ins.adapters.zypper_adapter import ZypperAdapter
 
+import output_samples as samples
+from conftest import patch_runner, patch_which
 
 # ------------------------------------------------------------------ zypper
 

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import pytest
-
-import output_samples
 from ins.adapters.snap_adapter import SnapAdapter
 
+import output_samples
 from conftest import patch_runner, patch_which
 
 

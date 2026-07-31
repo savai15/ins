@@ -4,24 +4,34 @@
 
 _ins() {
   local -a subcommands sources
-  subcommands=(doctor info)
+  subcommands=(doctor info export bundle history undo completions)
   sources=(apt flatpak dnf pacman zypper snap nix apk)
+  local flags=(-s -i -r -u -l -o -U --s -y --json --dry-run -q --no-progress --installed -v -h)
 
   if (( CURRENT == 2 )); then
     _describe 'command' subcommands
-    compadd -- -s -i -r --s -u -y --json -v -h
+    compadd -- $flags
     return
   fi
 
   case $words[2] in
-    info)
-      compadd -a sources
+    info|-i|--install|-s|--search)
+      compadd -- $(ins completions packages "$PREFIX" 2>/dev/null)
       ;;
-    doctor)
-      compadd -- -s -i -r --s -u -y --json -v -h
+    -r|--remove|-U|--upgrade)
+      compadd -- $(ins completions packages --installed "$PREFIX" 2>/dev/null)
+      ;;
+    bundle)
+      compadd -- check install
+      ;;
+    completions)
+      compadd -- bash zsh fish packages
+      ;;
+    history)
+      compadd -- 10 20 50
       ;;
     *)
-      compadd -- -s -i -r --s -u -y --json -v -h
+      compadd -- $flags
       compadd -a sources
       ;;
   esac

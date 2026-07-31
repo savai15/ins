@@ -39,7 +39,6 @@ class FlatpakAdapter(SourceAdapter):
             if not app_id or app_id in ("Application", "Name"):
                 continue
             version = cols[1].strip() if len(cols) > 1 else ""
-            remotes = cols[3].strip() if len(cols) > 3 else ""
             description = cols[4].strip() if len(cols) > 4 else ""
             if len(cols) > 5:
                 description = "\t".join(cols[4:]).strip()

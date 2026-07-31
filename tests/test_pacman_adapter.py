@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from ins.adapters.pacman_adapter import PacmanAdapter
+
 import output_samples as samples
 from conftest import patch_runner, patch_which
-
-from ins.adapters.pacman_adapter import PacmanAdapter
 
 
 def _routes():

@@ -5,12 +5,12 @@ from __future__ import annotations
 import importlib
 
 import pytest
-
-import output_samples
 from ins.adapters._subprocess import CommandFailed
 from ins.adapters.fake_adapter import FakeAdapter
 from ins.cache import Cache
 from ins.config import Config
+
+import output_samples
 
 
 class FakeProcess:
@@ -54,7 +54,9 @@ def patch_runner(monkeypatch, module: str, routes: list[tuple[list[str], int, st
     non-empty line of the routed stdout, matching the real contract.
     """
     fake_run, calls = make_runner(routes)
-    monkeypatch.setattr(f"{module}.run", fake_run)
+    mod = importlib.import_module(module)
+    if hasattr(mod, "run"):
+        monkeypatch.setattr(f"{module}.run", fake_run)
 
     from ins.adapters import _subprocess as sp
 
@@ -151,12 +153,12 @@ def fake_env(monkeypatch, tmp_path):
 
 __all__ = [
     "FakeProcess",
+    "apt_routes",
+    "fake_env",
+    "fake_pair",
+    "flatpak_routes",
     "make_runner",
+    "patch_dpkg_status",
     "patch_runner",
     "patch_which",
-    "patch_dpkg_status",
-    "apt_routes",
-    "flatpak_routes",
-    "fake_pair",
-    "fake_env",
 ]

@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 
 import pytest
-
 from ins.adapters.fake_adapter import FakeAdapter
 from ins.cache import Cache
 from ins.models import AppInfo

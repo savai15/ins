@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import io
 
-from rich.console import Console
-
 from ins.picker import PickerState, select_package
 from ins.search_engine import SearchEngine
+from rich.console import Console
 
 
 def _console() -> Console:
@@ -75,7 +74,7 @@ def test_select_package_backspace_recover(fake_pair):
 
 
 def test_bare_ins_runs_picker_on_tty(fake_env, capsys, monkeypatch):
-    import ins.cli as cli
+    from ins import cli
 
     monkeypatch.setattr("ins.cli._stdin_is_tty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: "n")
@@ -96,7 +95,7 @@ def test_bare_ins_runs_picker_on_tty(fake_env, capsys, monkeypatch):
 
 
 def test_bare_ins_picker_install_flow(fake_env, capsys, monkeypatch, tmp_path):
-    import ins.cli as cli
+    from ins import cli
     from ins.cache import Cache
 
     monkeypatch.setattr("ins.cli._stdin_is_tty", lambda: True)
@@ -112,7 +111,7 @@ def test_bare_ins_picker_install_flow(fake_env, capsys, monkeypatch, tmp_path):
 
 
 def test_bare_ins_cancel(fake_env, capsys, monkeypatch):
-    import ins.cli as cli
+    from ins import cli
 
     monkeypatch.setattr("ins.cli._stdin_is_tty", lambda: True)
     monkeypatch.setattr("ins.cli.select_package", lambda engine, console: None)

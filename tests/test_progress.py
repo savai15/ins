@@ -4,16 +4,14 @@ from __future__ import annotations
 
 from io import StringIO
 
-from rich.console import Console
-
-import ins.cli as cli
+from ins import cli
 from ins.adapters._subprocess import iter_stream
 from ins.adapters.apt_adapter import AptAdapter
 from ins.adapters.fake_adapter import FakeAdapter
 from ins.adapters.flatpak_adapter import FlatpakAdapter
+from rich.console import Console
 
-from conftest import apt_routes, flatpak_routes, patch_runner, patch_which
-
+from conftest import flatpak_routes, patch_runner, patch_which
 
 # ----------------------------------------------------------- iter_stream
 

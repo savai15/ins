@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-import ins.cli as cli
+from ins import cli
 from ins.cache import Cache
 
 
@@ -694,6 +692,7 @@ def test_no_progress_still_installs(fake_env, capsys, tmp_path):
 
 def test_doctor_json(fake_env, capsys):
     import json as _json
+
     from ins.adapters.fake_adapter import FakeAdapter
 
     cli.main(["-i", "vlc", "-y"])
@@ -718,4 +717,5 @@ def test_update_json(fake_env, capsys):
     assert rc == 0
     assert payload["total"] == 6
     assert payload["sources"] == {"fake": 3, "fake2": 3}
+    assert payload["updaters"] == {}
     assert payload["failed"] == []

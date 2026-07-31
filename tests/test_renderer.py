@@ -5,12 +5,11 @@ from __future__ import annotations
 import re
 from io import StringIO
 
-from rich.console import Console
-
 from ins import theme
 from ins.models import AppInfo
 from ins.renderer import render_search_results
 from ins.search_engine import GroupedResult
+from rich.console import Console
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 

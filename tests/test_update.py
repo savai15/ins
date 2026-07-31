@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-import ins.cli as cli
+from ins import cli
 from ins.adapters._subprocess import AdapterError
 from ins.adapters.apk_adapter import ApkAdapter
 from ins.adapters.apt_adapter import AptAdapter
@@ -15,7 +14,6 @@ from ins.adapters.pacman_adapter import PacmanAdapter
 from ins.adapters.zypper_adapter import ZypperAdapter
 
 from conftest import patch_runner, patch_which
-
 
 # ---------------------------------------------------------------- CLI level
 
@@ -60,10 +58,15 @@ def test_update_failure_reported(fake_env, capsys, monkeypatch):
 def test_apt_update_counts_upgradable(monkeypatch):
     patch_which(monkeypatch, "ins.adapters.apt_adapter", ["apt-get"])
     routes = [
-        (["apt-get", "update"], 0,
-         "Hit:1 http://deb.debian.org/debian bookworm InRelease\n"
-         "Reading package lists... Done\n"
-         "2 packages can be upgraded. Run 'apt list --upgradable' for them.\n", ""),
+        (
+            ["apt-get", "update"], 0,
+            (
+                "Hit:1 http://deb.debian.org/debian bookworm InRelease\n"
+                "Reading package lists... Done\n"
+                "2 packages can be upgraded. Run 'apt list --upgradable' for them.\n"
+            ),
+            "",
+        ),
     ]
     calls = patch_runner(monkeypatch, "ins.adapters.apt_adapter", routes)
 

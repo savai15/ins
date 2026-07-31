@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from typing import Callable, Iterator
 
 from rich.console import Console
 from rich.live import Live

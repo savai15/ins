@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import output_samples as samples
-from conftest import apt_routes, patch_dpkg_status, patch_runner, patch_which
-
 from ins.adapters.apt_adapter import AptAdapter
+
+from conftest import apt_routes, patch_dpkg_status, patch_runner, patch_which
 
 
 def test_is_available_true_with_apt_and_dpkg_status(monkeypatch):

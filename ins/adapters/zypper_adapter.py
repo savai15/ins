@@ -27,7 +27,7 @@ class ZypperAdapter(SourceAdapter):
             stripped = line.strip()
             if not stripped or stripped.startswith("-"):
                 continue
-            if stripped.startswith("S  ") or stripped.startswith("S |"):
+            if stripped.startswith(("S  ", "S |")):
                 continue
             cols = [c.strip() for c in line.split("|")]
             if len(cols) < 3:

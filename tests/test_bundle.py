@@ -5,7 +5,6 @@ from __future__ import annotations
 import tomllib
 
 import pytest
-
 from ins.bundle import build_manifest, check, dumps, load_manifest
 from ins.models import AppInfo
 

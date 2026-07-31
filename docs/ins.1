@@ -1,0 +1,190 @@
+.TH INS 1 "July 2026" "ins 0.2.0" "User Commands"
+.SH NAME
+ins \- a universal CLI package search/install tool for Linux
+.SH SYNOPSIS
+.B ins
+[\fIoptions\fR]
+.br
+.B ins
+\fIcommand\fR [\fIargs\fR]
+.SH DESCRIPTION
+.B ins
+is a universal package manager frontend that unifies apt, dnf, pacman,
+zypper, flatpak, snap, nix, and apk behind one interface. Sources are
+auto-detected by tool presence and ranked by a configurable priority; the
+same app from multiple sources is merged into one result.
+.PP
+Running bare
+.B ins
+on a terminal opens an interactive type-to-filter picker.
+.SH COMMANDS
+.TP
+.B ins -s, --search <query>
+Search for packages across all sources, deduplicated and ranked.
+.TP
+.B ins -i, --install <pkg>...
+Install one or more packages with confirmation and live progress.
+.TP
+.B ins -r, --remove <pkg>...
+Remove one or more installed packages.
+.TP
+.B ins -u, --update
+Update every detected source's package index, then run detected tool
+updaters (pipx, uv, rustup, fwupd) and any custom updaters from the config.
+.TP
+.B ins -l, --list
+List installed packages grouped by source.
+.TP
+.B ins -o, --outdated
+List installed packages with newer versions available.
+.TP
+.B ins -U, --upgrade <pkg>...
+Upgrade one or more installed packages.
+.TP
+.B ins info <pkg>
+Show a detailed view: description, license, homepage, size, install state
+per source. Optional inline icons on kitty / iTerm2 / WezTerm.
+.TP
+.B ins doctor
+Scan all sources for duplicate installs and offer to resolve them.
+.TP
+.B ins export [file]
+Write installed packages as a TOML manifest (stdout when no file given).
+.TP
+.B ins bundle check <file>
+Compare a manifest against the installed state; exit non-zero on drift.
+.TP
+.B ins bundle install <file>
+Install what the manifest is missing.
+.TP
+.B ins history [n]
+Show the last n install/remove/upgrade transactions (default 20).
+.TP
+.B ins undo
+Reverse the last install or remove transaction, verifying package state first.
+.TP
+.B ins completions <bash|zsh|fish|packages> [prefix]
+Print a completion script, or package names for dynamic completion
+(\fI--installed\fR restricts to installed packages).
+.SH OPTIONS
+.TP
+.B --s, --source <source>...
+Restrict the action to specific sources (e.g. apt, flatpak, snap).
+.TP
+.B -y, --yes
+Assume yes to all prompts (for scripting).
+.TP
+.B --json
+Machine-readable output for search, info, list, outdated, bundle check,
+doctor, update, history, and dry-run previews.
+.TP
+.B --dry-run
+Show what install/remove/update/upgrade would do without changing anything.
+.TP
+.B -q, --quiet
+Suppress informational output; errors are still shown.
+.TP
+.B --no-progress
+Run actions without the live progress bar.
+.TP
+.B -v, --version
+Print version and exit.
+.SH CONFIGURATION
+Configuration lives in
+.IR ~/.config/ins/config.toml .
+.SS Sources
+.PP
+.B [sources]
+.RS
+.TP
+.B priority = ["apt", "flatpak", ...]
+Order used when a package exists in several sources.
+.RE
+.SS Cache
+.PP
+.B [cache]
+.RS
+.TP
+.B enabled = true|false
+Turn the SQLite cache on or off.
+.TP
+.B ttl_seconds = 3600
+How long cached results stay fresh.
+.TP
+.B max_entries = 5000
+Cache entry cap (oldest entries evicted first).
+.RE
+.SS Updaters
+.PP
+.B [updaters]
+.RS
+.TP
+.B disable = ["fwupd"]
+Skip these built-in updaters (pipx, uv, rustup, fwupd).
+.TP
+.B custom = { texlive = ["tlmgr", "update", "--all"] }
+Extra update commands run by
+.BR "ins -u" ;
+each is a name mapped to an argv list.
+.RE
+.SH ENVIRONMENT
+.TP
+.B INS_FAKE=1
+Register the demo sources
+.B fake
+and
+.BR fake2 ,
+which simulate a package manager without touching the system.
+.TP
+.B XDG_DATA_HOME
+Base directory for the cache and fake-source state
+(default
+.IR ~/.local/share ).
+.SH EXIT STATUS
+.TP
+.B 0
+Success (or nothing to do).
+.TP
+.B 1
+A package was not found, or an adapter/updater failed.
+.TP
+.B 2
+Usage error: conflicting actions, unknown source, or bad arguments.
+.SH FILES
+.TP
+.I ~/.config/ins/config.toml
+User configuration.
+.TP
+.I ~/.local/share/ins/cache.db
+SQLite cache (history, search results, installed state).
+.SH EXAMPLES
+.TP
+ins -s vlc
+Search for VLC across all sources.
+.TP
+ins -i vlc gimp --dry-run
+Preview an install.
+.TP
+ins -i vlc gimp -y
+Install without prompting.
+.TP
+ins -u
+Update indexes and tool updaters.
+.TP
+ins export bundle.toml && ins bundle check bundle.toml
+Provisioning round-trip.
+.TP
+ins history 5 && ins undo
+Review and reverse the last transaction.
+.SH SEE ALSO
+.BR apt-get (8),
+.BR dnf (8),
+.BR pacman (8),
+.BR zypper (8),
+.BR flatpak (1),
+.BR snap (1),
+.BR nix-env (1),
+.BR apk (8),
+.BR pipx (1),
+.BR rustup (1),
+.BR fwupdmgr (1)

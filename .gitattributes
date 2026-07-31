@@ -8,3 +8,5 @@
 *.txt   text eol=lf
 *.gitignore text eol=lf
 LICENSE text eol=lf
+*.yml  text eol=lf
+*.1    text eol=lf

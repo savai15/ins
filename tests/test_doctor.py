@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import pytest
-
-import ins.cli as cli
+from ins import cli
+from ins.adapters.apt_adapter import AptAdapter
 from ins.adapters.fake_adapter import FakeAdapter
+from ins.adapters.flatpak_adapter import FlatpakAdapter
 
 from conftest import patch_runner, patch_which
-from ins.adapters.apt_adapter import AptAdapter
-from ins.adapters.flatpak_adapter import FlatpakAdapter
 
 
 @pytest.fixture
@@ -60,7 +59,7 @@ def test_doctor_respects_yes_flag_not_auto_removing(dup_env, capsys):
 
 
 def test_doctor_keeps_highest_priority_source(dup_env, capsys, monkeypatch):
-    import ins.adapters.registry as registry
+    from ins.adapters import registry
 
     original_detect = registry.detect_sources
 

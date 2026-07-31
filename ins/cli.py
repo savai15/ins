@@ -19,6 +19,9 @@ from rich.progress import Progress
 from ins import __version__, theme
 from ins.adapters import registry
 from ins.adapters._subprocess import AdapterError
+from ins.bundle import check as check_manifest
+from ins.bundle import dumps as manifest_dumps
+from ins.bundle import load_manifest
 from ins.cache import Cache
 from ins.config import Config, DEFAULT_CONFIG_PATH
 from ins.renderer import render_duplicates, render_info, render_list, render_outdated, render_search_results
@@ -85,14 +88,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="machine-readable JSON output (search, info)",
     )
     parser.add_argument(
-        "command", nargs="?", choices=("doctor", "info"),
+        "command", nargs="?", choices=("doctor", "info", "export", "bundle"),
         help="doctor: scan for duplicate installs across sources; "
-             "info <pkg>: detailed view of a package",
+             "info <pkg>: detailed view of a package; "
+             "export [file]: write installed packages as a TOML manifest; "
+             "bundle check|install <file>: verify or apply a manifest",
     )
     parser.add_argument(
         "subject", nargs="?",
         metavar="PKG",
-        help="package name for `ins info`",
+        help="package name for `ins info`; check/install for `ins bundle`",
+    )
+    parser.add_argument(
+        "bundle_file", nargs="?",
+        metavar="FILE",
+        help="manifest path for `ins bundle`",
     )
     return parser
 
@@ -705,6 +715,122 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return rc
 
 
+# -------------------------------------------------------- bundle (ins export / ins bundle)
+
+def cmd_export(args: argparse.Namespace, target: str | None) -> int:
+    config, adapters, cache, errors = _build_context(args)
+    if errors:
+        print(f"error: {'; '.join(errors)}", file=sys.stderr)
+        return 2
+    if not adapters:
+        print("error: no package sources detected on this system", file=sys.stderr)
+        return 1
+    installed = _scan_installed(adapters)
+    if target:
+        path = Path(target)
+        path.write_text(manifest_dumps(installed), encoding="utf-8")
+        print(f"exported {len(installed)} package(s) to {path}")
+    else:
+        print(manifest_dumps(installed))
+    return 0
+
+
+def _bundle_report(args: argparse.Namespace, report: dict) -> int:
+    console = Console()
+    drift = bool(report["missing"] or report["mismatched"])
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "missing": [list(pair) for pair in report["missing"]],
+                    "mismatched": [
+                        {"source": s, "package": p, "installed": i, "required": r}
+                        for s, p, i, r in report["mismatched"]
+                    ],
+                    "extra": [list(pair) for pair in report["extra"]],
+                },
+                indent=2,
+            )
+        )
+        return 1 if drift else 0
+    if not drift:
+        console.print(f"[{theme.SUCCESS}]bundle is up to date[/]")
+        if report["extra"]:
+            console.print(f"[dim]{len(report['extra'])} extra package(s) installed but not in manifest[/]")
+        return 0
+    for source, pkg in report["missing"]:
+        console.print(f"[bold]{pkg}[/bold] missing ({source})")
+    for source, pkg, got, want in report["mismatched"]:
+        console.print(f"[bold]{pkg}[/bold] ({source}): installed {got}, manifest requires {want}")
+    return 1
+
+
+def _bundle_install(args: argparse.Namespace, report: dict, adapters: list, cache) -> int:
+    console = Console()
+    if not report["missing"] and not report["mismatched"]:
+        console.print(f"[{theme.SUCCESS}]bundle is up to date[/]")
+        return 0
+    for source, pkg, got, want in report["mismatched"]:
+        print(f"note: {pkg} ({source}) is {got}, manifest requires {want} — use `ins -U` to upgrade")
+    rc = 0
+    for source, pkg in report["missing"]:
+        adapter = _adapter_by_name(adapters, source)
+        if adapter is None:
+            print(f"error: source '{source}' is not available on this system", file=sys.stderr)
+            rc = 1
+            continue
+        if not _confirm(f"Install '{pkg}' from {source}? [y/N] ", args):
+            print(f"skipped {pkg}")
+            continue
+        try:
+            _run_with_progress(
+                lambda cb: adapter.install(pkg, on_progress=cb),
+                pkg,
+                console,
+            )
+        except AdapterError as exc:
+            print(f"error: failed to install {pkg}: {exc}", file=sys.stderr)
+            rc = 1
+            continue
+        if cache is not None:
+            cache.invalidate(package_id=pkg, source=source)
+            cache.mark_installed(source, pkg, "")
+        print(f"installed {pkg} from {source}")
+    return rc
+
+
+def cmd_bundle(args: argparse.Namespace, action: str | None, file_arg: str | None) -> int:
+    if action not in ("check", "install"):
+        print(
+            "error: `ins bundle` requires an action: ins bundle <check|install> <file>",
+            file=sys.stderr,
+        )
+        return 2
+    if not file_arg:
+        print(f"error: `ins bundle {action}` requires a manifest file", file=sys.stderr)
+        return 2
+    try:
+        manifest = load_manifest(file_arg)
+    except FileNotFoundError:
+        print(f"error: manifest not found: {file_arg}", file=sys.stderr)
+        return 2
+    except (ValueError, OSError) as exc:
+        print(f"error: invalid manifest {file_arg}: {exc}", file=sys.stderr)
+        return 2
+    config, adapters, cache, errors = _build_context(args)
+    if errors:
+        print(f"error: {'; '.join(errors)}", file=sys.stderr)
+        return 2
+    if not adapters:
+        print("error: no package sources detected on this system", file=sys.stderr)
+        return 1
+    installed = _scan_installed(adapters)
+    report = check_manifest(manifest, installed)
+    if action == "check":
+        return _bundle_report(args, report)
+    return _bundle_install(args, report, adapters, cache)
+
+
 # ------------------------------------------------------------- dispatch
 
 def dispatch(args: argparse.Namespace) -> int:
@@ -713,6 +839,10 @@ def dispatch(args: argparse.Namespace) -> int:
         chosen.append("doctor")
     if args.command == "info":
         chosen.append("info")
+    if args.command == "export":
+        chosen.append("export")
+    if args.command == "bundle":
+        chosen.append("bundle")
     if args.search is not None:
         chosen.append("search")
     if args.install is not None:
@@ -737,6 +867,10 @@ def dispatch(args: argparse.Namespace) -> int:
             print("error: `ins info` requires a package name: ins info <pkg>", file=sys.stderr)
             return 2
         return cmd_info(args, args.subject)
+    if args.command == "export":
+        return cmd_export(args, args.subject)
+    if args.command == "bundle":
+        return cmd_bundle(args, args.subject, args.bundle_file)
     if "search" in chosen:
         return cmd_search(args)
     if "install" in chosen:
@@ -754,7 +888,7 @@ def dispatch(args: argparse.Namespace) -> int:
     print(
         "error: no action given — use -s/--search, -i/--install, -r/--remove, "
         "-u/--update, -l/--list, -o/--outdated, -U/--upgrade, "
-        "or `ins doctor` / `ins info <pkg>`",
+        "or `ins doctor` / `ins info <pkg>` / `ins export` / `ins bundle check|install <file>`",
         file=sys.stderr,
     )
     return 2

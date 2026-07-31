@@ -266,3 +266,167 @@ def test_list_outdated_conflict_rejected(fake_env, capsys):
     err = capsys.readouterr().err
     assert rc == 2
     assert "pick one action" in err
+
+
+def test_export_writes_manifest_file(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "git", "-y"])
+    capsys.readouterr()
+
+    manifest = tmp_path / "manifest.toml"
+    rc = cli.main(["export", str(manifest)])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "exported 2 package(s)" in out
+    import tomllib
+
+    with open(manifest, "rb") as fh:
+        data = tomllib.load(fh)
+    assert data["packages"]["fake"]["vlc"] == "3.0.20"
+    assert data["packages"]["fake"]["git"] == "2.45.2"
+
+
+def test_export_prints_to_stdout(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["export"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "[packages.fake]" in out
+    assert 'vlc = "3.0.20"' in out
+
+
+def test_bundle_check_up_to_date(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    manifest = tmp_path / "m.toml"
+    cli.main(["export", str(manifest)])
+    capsys.readouterr()
+
+    rc = cli.main(["bundle", "check", str(manifest)])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "bundle is up to date" in out
+
+
+def test_bundle_check_reports_missing(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    manifest = tmp_path / "m.toml"
+    cli.main(["export", str(manifest)])
+    capsys.readouterr()
+    cli.main(["-r", "vlc", "-y"])
+    capsys.readouterr()
+
+    rc = cli.main(["bundle", "check", str(manifest)])
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "vlc missing (fake)" in out
+
+
+def test_bundle_check_reports_version_mismatch(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    manifest = tmp_path / "m.toml"
+    manifest.write_text('[packages.fake]\nvlc = "9.9.9"\n', encoding="utf-8")
+
+    rc = cli.main(["bundle", "check", str(manifest)])
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "manifest requires 9.9.9" in out
+
+
+def test_bundle_check_json(fake_env, capsys, tmp_path):
+    import json as _json
+
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    manifest = tmp_path / "m.toml"
+    manifest.write_text('[packages.fake]\nvlc = "9.9.9"\nhtop = "3.3.0"\n', encoding="utf-8")
+
+    rc = cli.main(["bundle", "check", str(manifest), "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["missing"] == [["fake", "htop"]]
+    assert payload["mismatched"] == [
+        {"source": "fake", "package": "vlc", "installed": "3.0.20", "required": "9.9.9"}
+    ]
+
+
+def test_bundle_install_applies_manifest(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    manifest = tmp_path / "m.toml"
+    manifest.write_text('[packages.fake]\nvlc = "3.0.20"\nhtop = "3.3.0"\n', encoding="utf-8")
+
+    rc = cli.main(["bundle", "install", str(manifest), "-y"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "installed htop from fake" in out
+    assert "up to date" not in out
+    installed = set(Cache(tmp_path / "cache.db").get_installed("fake"))
+    assert installed == {("fake", "vlc", "3.0.20"), ("fake", "htop", "")}
+
+
+def test_bundle_install_up_to_date(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+    manifest = tmp_path / "m.toml"
+    cli.main(["export", str(manifest)])
+    capsys.readouterr()
+
+    rc = cli.main(["bundle", "install", str(manifest), "-y"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "bundle is up to date" in out
+
+
+def test_bundle_install_unknown_source_fails(fake_env, capsys, tmp_path):
+    manifest = tmp_path / "m.toml"
+    manifest.write_text('[packages.apt]\nvlc = "3.0.20"\n', encoding="utf-8")
+
+    rc = cli.main(["bundle", "install", str(manifest), "-y"])
+    err = capsys.readouterr().err
+
+    assert rc == 1
+    assert "source 'apt' is not available" in err
+
+
+def test_bundle_missing_file(fake_env, capsys, tmp_path):
+    rc = cli.main(["bundle", "check", str(tmp_path / "nope.toml")])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "manifest not found" in err
+
+
+def test_bundle_invalid_toml(fake_env, capsys, tmp_path):
+    manifest = tmp_path / "m.toml"
+    manifest.write_text("not [valid toml", encoding="utf-8")
+
+    rc = cli.main(["bundle", "check", str(manifest)])
+    err = capsys.readouterr().err
+
+    assert rc == 2
+    assert "invalid manifest" in err
+
+
+def test_bundle_requires_file(fake_env, capsys):
+    rc = cli.main(["bundle", "check"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "requires a manifest file" in err
+
+
+def test_bundle_unknown_action(fake_env, capsys):
+    rc = cli.main(["bundle", "frobnicate", "x.toml"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "check|install" in err

@@ -18,9 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `flatpak update --user`, `dnf upgrade`, `pacman -S`, `zypper update`,
   `snap refresh`, `apk add -u`, `nix-env -u`)
 - `AppInfo.available` field for upgrade-target versions (cache-safe round trip)
+- `ins export [file]` — snapshot installed packages as a TOML manifest
+  (stdout when no file given)
+- `ins bundle check <file>` — drift report (missing / version-mismatched /
+  extra packages) with `--json` and a non-zero exit code when out of date
+- `ins bundle install <file>` — install missing packages with confirm prompts
 
 ### Planned
-- `ins export` + `ins bundle install|check` — declarative machine provisioning
 - Interactive search/install picker (type-to-filter, arrow keys)
 - `--dry-run` transaction previews for install/remove/update
 - Install/remove transaction history with undo

@@ -26,6 +26,8 @@ detection, and per-package detail views across every source on your system.
 - **`ins -u`** — updates every detected source in sequence with a summary.
 - **`ins -l` / `ins -o` / `ins -U <pkg>...`** — list installed packages,
   see which have newer versions available, and upgrade them individually.
+- **`ins export` / `ins bundle`** — declarative provisioning: dump what's
+  installed to a TOML manifest, check drift, and reinstall it on a fresh box.
 - **Offline-friendly** — local SQLite cache with TTL; stale results are marked
   instead of failing when a source is unreachable.
 - **`--json`** — machine-readable output for scripting.
@@ -125,6 +127,14 @@ $ ins -U vlc -y
 upgraded vlc from fake
 ```
 
+Provision a machine from a manifest:
+
+```text
+$ ins export manifest.toml          # snapshot: what's installed, per source
+$ ins bundle check manifest.toml    # drift report (exit 1 if out of date)
+$ ins bundle install manifest.toml  # install what's missing (prompts, -y to skip)
+```
+
 Detail view per source:
 
 ```text
@@ -179,10 +189,13 @@ $ ins -s vlc --json
 | `ins -l`            | list installed packages grouped by source          |
 | `ins -o`            | list packages with newer versions available        |
 | `ins -U <pkg>...`   | upgrade installed packages                         |
+| `ins export [file]` | write installed packages as a TOML manifest         |
+| `ins bundle check <file>` | compare a manifest against installed state    |
+| `ins bundle install <file>` | install what the manifest is missing       |
 | `ins info <pkg>`    | detail view: license, homepage, size per source     |
 | `ins doctor`        | find + resolve duplicate installs                   |
 | `--s <source>`      | restrict any action to specific sources             |
-| `--json`            | machine-readable output (search, info, list, outdated) |
+| `--json`            | machine-readable output (search, info, list, outdated, bundle check) |
 | `-y / --yes`        | assume yes (scripting)                              |
 
 ## Supported sources
@@ -226,7 +239,7 @@ max_entries = 5000
 ```bash
 git clone https://github.com/savai15/ins && cd ins
 pip install -e ".[dev]"
-pytest -q        # 185 tests, all subprocess calls stubbed with real Linux output
+pytest -q        # 204 tests, all subprocess calls stubbed with real Linux output
 ```
 
 The test suite replays *real* captured package-manager output

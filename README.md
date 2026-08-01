@@ -56,6 +56,10 @@ detection, and per-package detail views across every source on your system.
 
 Requires Python 3.11+.
 
+<p align="center">
+  <img src="assets/ins-install.svg" alt="install: curl one-liner, pipx, pip — typed live in a terminal" width="700">
+</p>
+
 ```bash
 # one-line installer (pipx, falls back to pip --user)
 curl -sSL https://raw.githubusercontent.com/savai15/ins/main/install.sh | bash
@@ -97,6 +101,10 @@ man ins
 
 Every action takes an explicit flag or subcommand — bare `ins` prints the
 grouped command list (search & install / maintain / share / options):
+
+<p align="center">
+  <img src="assets/ins-demo.svg" alt="terminal demo: search vlc, install with live progress, update all sources" width="700">
+</p>
 
 ```text
 $ ins
@@ -240,6 +248,10 @@ homepages
 
 Duplicate check + resolution:
 
+<p align="center">
+  <img src="assets/ins-doctor.svg" alt="ins doctor: duplicate vlc across apt and snap, with sources and cache summary" width="700">
+</p>
+
 ```text
 $ ins doctor
 Duplicate installations
@@ -324,6 +336,10 @@ box. There is no demo mode: every source is a real package manager.
 `ins` reads `~/.config/ins/config.toml` and works with sensible defaults out of
 the box:
 
+<p align="center">
+  <img src="assets/ins-config.svg" alt="configuration: sources priority, cache TTL, updaters — syntax-coloured TOML" width="700">
+</p>
+
 ```toml
 [sources]
 priority = ["apt", "flatpak", "dnf", "pacman", "zypper", "snap", "nix", "apk"]
@@ -346,6 +362,10 @@ custom = { texlive = ["tlmgr", "update", "--all"] }
 ```
 
 ## Development
+
+<p align="center">
+  <img src="assets/ins-dev.svg" alt="development: clone, pip install -e, pytest 270 passed, ruff clean, CI on 3.11/3.12/3.13" width="700">
+</p>
 
 ```bash
 git clone https://github.com/savai15/ins && cd ins

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 130" width="720" height="130">
+  <defs>
+    <linearGradient id="chip" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c2128"/>
+      <stop offset="1" stop-color="#161b22"/>
+    </linearGradient>
+    <clipPath id="c0"><rect x="6" y="56" width="78" height="36"><animate attributeName="y" from="56" to="20" dur="0.45s" begin="0.15s" fill="freeze"/></rect></clipPath>
+    <clipPath id="c1"><rect x="96" y="56" width="78" height="36"><animate attributeName="y" from="56" to="20" dur="0.45s" begin="0.35s" fill="freeze"/></rect></clipPath>
+    <clipPath id="c2"><rect x="186" y="56" width="78" height="36"><animate attributeName="y" from="56" to="20" dur="0.45s" begin="0.55s" fill="freeze"/></rect></clipPath>
+    <clipPath id="c3"><rect x="276" y="56" width="78" height="36"><animate attributeName="y" from="56" to="20" dur="0.45s" begin="0.75s" fill="freeze"/></rect></clipPath>
+    <clipPath id="c4"><rect x="366" y="56" width="78" height="36"><animate attributeName="y" from="56" to="20" dur="0.45s" begin="0.95s" fill="freeze"/></rect></clipPath>
+    <clipPath id="c5"><rect x="456" y="56" width="78" height="36"><animate attributeName="y" from="56" to="20" dur="0.45s" begin="1.15s" fill="freeze"/></rect></clipPath>
+    <clipPath id="c6"><rect x="546" y="56" width="78" height="36"><animate attributeName="y" from="56" to="20" dur="0.45s" begin="1.35s" fill="freeze"/></rect></clipPath>
+    <clipPath id="c7"><rect x="636" y="56" width="78" height="36"><animate attributeName="y" from="56" to="20" dur="0.45s" begin="1.55s" fill="freeze"/></rect></clipPath>
+  </defs>
+
+  <style>
+    .chip { fill: url(#chip); stroke: #30363d; stroke-width: 1.2; }
+    .label { font: 15px "DejaVu Sans Mono", ui-monospace, monospace; fill: #e6edf3; text-anchor: middle; }
+    .underline { rx: 1.5; }
+    @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+    .caption { font: 14px "DejaVu Sans Mono", ui-monospace, monospace; fill: #6e7681; text-anchor: middle; opacity: 0; animation: fadein .5s ease-out 2.2s forwards; }
+  </style>
+
+  <g clip-path="url(#c0)">
+    <rect class="chip" x="6" y="20" width="78" height="36" rx="9"/>
+    <circle cx="24" cy="38" r="4" fill="#e95420"/>
+    <text class="label" x="45" y="43">apt</text>
+    <rect class="underline" x="18" y="57" width="54" height="3" fill="#e95420"/>
+  </g>
+  <g clip-path="url(#c1)">
+    <rect class="chip" x="96" y="20" width="78" height="36" rx="9"/>
+    <circle cx="114" cy="38" r="4" fill="#51a2da"/>
+    <text class="label" x="135" y="43">dnf</text>
+    <rect class="underline" x="108" y="57" width="54" height="3" fill="#51a2da"/>
+  </g>
+  <g clip-path="url(#c2)">
+    <rect class="chip" x="186" y="20" width="78" height="36" rx="9"/>
+    <circle cx="204" cy="38" r="4" fill="#1793d1"/>
+    <text class="label" x="225" y="43">pacman</text>
+    <rect class="underline" x="198" y="57" width="54" height="3" fill="#1793d1"/>
+  </g>
+  <g clip-path="url(#c3)">
+    <rect class="chip" x="276" y="20" width="78" height="36" rx="9"/>
+    <circle cx="294" cy="38" r="4" fill="#73ba25"/>
+    <text class="label" x="315" y="43">zypper</text>
+    <rect class="underline" x="288" y="57" width="54" height="3" fill="#73ba25"/>
+  </g>
+  <g clip-path="url(#c4)">
+    <rect class="chip" x="366" y="20" width="78" height="36" rx="9"/>
+    <circle cx="384" cy="38" r="4" fill="#4a90d9"/>
+    <text class="label" x="405" y="43">flatpak</text>
+    <rect class="underline" x="378" y="57" width="54" height="3" fill="#4a90d9"/>
+  </g>
+  <g clip-path="url(#c5)">
+    <rect class="chip" x="456" y="20" width="78" height="36" rx="9"/>
+    <circle cx="474" cy="38" r="4" fill="#82bea0"/>
+    <text class="label" x="495" y="43">snap</text>
+    <rect class="underline" x="468" y="57" width="54" height="3" fill="#82bea0"/>
+  </g>
+  <g clip-path="url(#c6)">
+    <rect class="chip" x="546" y="20" width="78" height="36" rx="9"/>
+    <circle cx="564" cy="38" r="4" fill="#7eb6a7"/>
+    <text class="label" x="585" y="43">nix</text>
+    <rect class="underline" x="558" y="57" width="54" height="3" fill="#7eb6a7"/>
+  </g>
+  <g clip-path="url(#c7)">
+    <rect class="chip" x="636" y="20" width="78" height="36" rx="9"/>
+    <circle cx="654" cy="38" r="4" fill="#0d597f"/>
+    <text class="label" x="675" y="43">apk</text>
+    <rect class="underline" x="648" y="57" width="54" height="3" fill="#0d597f"/>
+  </g>
+
+  <text class="caption" x="360" y="104">auto-detected · merged · ranked</text>
+</svg>

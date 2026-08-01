@@ -14,7 +14,15 @@
 <p align="center"><b>One command to find, install, and remove software on Linux</b> — no matter which package manager your distro ships.</p>
 
 <p align="center">
+  <img src="assets/ins-wave-top.svg" alt="" width="700">
+</p>
+
+<p align="center">
   <img src="assets/ins-terminal.svg" alt="ins -s vcl finds vlc; ins -i vlc installs it with live progress" width="700">
+</p>
+
+<p align="center">
+  <img src="assets/ins-sources.svg" alt="apt, dnf, pacman, zypper, flatpak, snap, nix, apk" width="700">
 </p>
 
 ## Features
@@ -167,5 +175,9 @@ The test suite replays *real* captured package-manager output
 verified against actual tool formats — no mocks of the system calls involved.
 
 ## License
+
+<p align="center">
+  <img src="assets/ins-wave-bottom.svg" alt="" width="700">
+</p>
 
 MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Savai.

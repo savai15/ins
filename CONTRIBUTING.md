@@ -27,16 +27,20 @@ through a fake runner (`tests/conftest.py`) that replays real captured
 package-manager output from `tests/output_samples.py`. Parsing code is
 therefore verified against authentic tool formats, but nothing is executed.
 
-To try the CLI end-to-end without touching your system:
+To try the CLI end-to-end without installing or removing anything, use
+`--dry-run` (previews installs/removes/updates) and `--source` to limit the
+scope to one source, e.g.:
 
 ```bash
-INS_FAKE=1 ins -s vlc
+ins -s vlc --source apt        # search one source only
+ins -i curl --dry-run          # preview an install without touching the system
+ins doctor --dry-run           # scan for duplicates without offering removal
 ```
 
 ## Adding or changing a source adapter
 
 1. Implement `SourceAdapter` in `ins/adapters/` (see `base.py` for the
-   interface; `fake_adapter.py` is the reference implementation).
+   interface; `tests/fake_adapter.py` is the reference implementation).
 2. Capture realistic output of the tool you wrap (run it on a real system,
    or find canonical examples) and add it to `tests/output_samples.py`.
 3. Add a `tests/test_<name>_adapter.py` mirroring the existing adapter tests.

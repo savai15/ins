@@ -9,11 +9,36 @@ from __future__ import annotations
 import os
 import shutil
 
-from ins.adapters._subprocess import run, run_privileged, run_privileged_stream
+from ins.adapters._subprocess import AdapterError, run, run_privileged, run_privileged_stream
 from ins.adapters.base import SourceAdapter
 from ins.models import AppInfo
 
 _SEARCH_TIMEOUT = 60.0
+
+
+def _typo_score(query: str, name: str, score_cutoff: float | None = None) -> float:
+    """Typo-tolerant name match: order similarity (partial_ratio) plus how
+    much of the query's letter set the name covers. `vcl` -> `vlc` scores
+    high (same letters, wrong order); long unrelated names like
+    `webdavclient` score low even though they contain the letters."""
+    from collections import Counter
+
+    from rapidfuzz import fuzz
+
+    q = Counter(query.lower())
+    n = Counter(name.lower())
+    overlap = sum((q & n).values())
+    # How much of BOTH strings the shared letters cover: a long junk query
+    # (e.g. 'zzzzqqqq') shares few letters with a short real name, so its
+    # density stays low even though partial_ratio can be high.
+    density = min(
+        overlap / len(query) if query else 0.0,
+        overlap / len(name) if name else 0.0,
+    )
+    score = 0.6 * fuzz.partial_ratio(query, name) + 0.4 * 100.0 * density
+    if score_cutoff is not None and score < score_cutoff:
+        return 0
+    return score
 
 
 class AptAdapter(SourceAdapter):
@@ -32,8 +57,9 @@ class AptAdapter(SourceAdapter):
             except Exception:
                 results = None
             if results is not None:
-                return results
-        return self._search_subprocess(query, limit)
+                return self._fuzzy_name_fallback(query, results, limit)
+        results = self._search_subprocess(query, limit)
+        return self._fuzzy_name_fallback(query, results, limit)
 
     @staticmethod
     def _has_python_apt() -> bool:
@@ -47,10 +73,14 @@ class AptAdapter(SourceAdapter):
         import apt
 
         cache = apt.Cache()
+        query_l = query.lower()
         seen: set[str] = set()
         out: list[AppInfo] = []
-        for pkg in cache.search(query):
+        # python-apt >= 3.0 has no Cache.search(); match names by substring.
+        for pkg in cache:
             name = pkg.name
+            if query_l not in name.lower():
+                continue
             if name in seen:
                 continue
             seen.add(name)
@@ -72,15 +102,17 @@ class AptAdapter(SourceAdapter):
             if len(out) >= limit:
                 return out
         if len(out) < limit:
-            for pkg in cache.search(query, search_descriptions=True):
+            for pkg in cache:
                 name = pkg.name
                 if name in seen:
                     continue
-                seen.add(name)
                 cand = pkg.candidate
                 if cand is None:
                     continue
                 desc = (cand.description or "").split("\n")[0].strip()
+                if query_l not in desc.lower():
+                    continue
+                seen.add(name)
                 out.append(
                     AppInfo(
                         id=name,
@@ -98,7 +130,11 @@ class AptAdapter(SourceAdapter):
 
     def _search_subprocess(self, query: str, limit: int) -> list[AppInfo]:
         proc = run(["apt-cache", "search", "--names-only", query], timeout=_SEARCH_TIMEOUT)
-        names = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+        # apt-cache prints "name - short description" (or bare names on some
+        # distros); only the name may be passed to `apt-cache show`.
+        names = [
+            ln.split(" - ", 1)[0].strip() for ln in proc.stdout.splitlines() if ln.strip()
+        ]
         if not names:
             return []
         names = names[:limit]
@@ -116,7 +152,7 @@ class AptAdapter(SourceAdapter):
                 size = int(size_kb) * 1024
             except ValueError:
                 size = 0
-            desc = block.get("Description", "").split("\n")[0].strip()
+            desc = _apt_description(block)
             out.append(
                 AppInfo(
                     id=name,
@@ -129,6 +165,62 @@ class AptAdapter(SourceAdapter):
                 )
             )
         return out
+
+    # --------------------------------------------------- fuzzy name fallback
+
+    def _fuzzy_name_fallback(self, query: str, results: list[AppInfo], limit: int) -> list[AppInfo]:
+        """apt-cache only matches names/descriptions literally, so a typo like
+        `vcl` misses `vlc`. When nothing returned is a (near-)exact name
+        match, fuzzy match against the full package-name list
+        (`apt-cache pkgnames`, a fast local call) and surface the best hits
+        first — name matches beat description matches."""
+        from rapidfuzz import fuzz, process
+
+        q_l = query.lower()
+        if any(r.name.lower() == q_l or fuzz.ratio(query, r.name) >= 90 for r in results):
+            return results
+        try:
+            names = run(["apt-cache", "pkgnames"], timeout=_SEARCH_TIMEOUT).stdout.splitlines()
+        except AdapterError:
+            return results
+        names = [n.strip() for n in names if n.strip()]
+        if not names:
+            return results
+        matches = [
+            (name, score)
+            for name, score, _ in process.extract(query, names, scorer=_typo_score, limit=8)
+            if score >= 70
+        ]
+        if not matches:
+            return results
+        try:
+            show = run(["apt-cache", "show", *[n for n, _ in matches]], timeout=_SEARCH_TIMEOUT)
+        except AdapterError:
+            return results
+        shown: list[AppInfo] = []
+        for block in _parse_apt_show(show.stdout):
+            name = block.get("Package", "")
+            if not name:
+                continue
+            try:
+                size = int(block.get("Installed-Size", "0")) * 1024
+            except ValueError:
+                size = 0
+            shown.append(
+                AppInfo(
+                    id=name,
+                    name=name,
+                    description=_apt_description(block),
+                    source=self.name,
+                    version=block.get("Version", ""),
+                    size=size,
+                    installed="installed" in block.get("Status", ""),
+                )
+            )
+        if not shown:
+            return results
+        seen = {r.id for r in results}
+        return (shown + [r for r in results if r.id not in seen])[:limit]
 
     # ---------------------------------------------------------- list_installed
 
@@ -277,11 +369,23 @@ class AptAdapter(SourceAdapter):
             homepage = block.get("Homepage", "")
             if homepage:
                 extra["homepage"] = homepage
-            description = block.get("Description", "")
+            desc = block.get("Description") or next(
+                (v for k, v in block.items() if k.startswith("Description")), ""
+            )
+            description = desc.strip()
             if description:
                 extra["description"] = description
             return extra or None
         return None
+
+
+def _apt_description(block: dict[str, str]) -> str:
+    """Short description from an `apt-cache show` block; Ubuntu localizes
+    the field as `Description-en`, Debian uses plain `Description`."""
+    desc = block.get("Description") or next(
+        (v for k, v in block.items() if k.startswith("Description")), ""
+    )
+    return desc.split("\n")[0].strip()
 
 
 def _parse_apt_show(text: str) -> list[dict[str, str]]:
@@ -300,7 +404,7 @@ def _parse_apt_show(text: str) -> list[dict[str, str]]:
             continue
         if line[:1] in (" ", "\t"):
             if current is not None and last_key:
-                joiner = "\n" if last_key == "Description" else " "
+                joiner = "\n" if last_key.startswith("Description") else " "
                 current[last_key] = current[last_key] + joiner + line.strip()
             continue
         if ":" in line:

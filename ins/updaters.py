@@ -31,6 +31,7 @@ class ToolUpdater:
     binary: ClassVar[str]
     command: ClassVar[list[str]]
     privileged: ClassVar[bool] = False
+    default_enabled: ClassVar[bool] = True
     count_pattern: ClassVar[re.Pattern | None] = None
 
     def is_available(self) -> bool:
@@ -78,11 +79,15 @@ class RustupUpdater(ToolUpdater):
 
 class FwupdUpdater(ToolUpdater):
     """Refresh firmware metadata only — `fwupdmgr update` is interactive and
-    can brick hardware, so it stays out of unattended `ins -u`."""
+    can brick hardware, so it stays out of unattended `ins -u`.
+
+    Off by default: `fwupdmgr refresh` may prompt for admin rights (polkit)
+    and downloads firmware metadata. Opt in via `enable = ["fwupd"]`."""
 
     name: ClassVar[str] = "fwupd"
     binary: ClassVar[str] = "fwupdmgr"
     command: ClassVar[list[str]] = ["fwupdmgr", "refresh"]
+    default_enabled: ClassVar[bool] = False
 
 
 class CustomUpdater:
@@ -116,14 +121,26 @@ _BUILTINS: dict[str, type[ToolUpdater]] = {
 def detect_updaters(settings) -> list[ToolUpdater | CustomUpdater]:
     """Available updaters, honoring config: disabled builtins + custom commands.
 
+    Only no-password, user-level updaters run by default (pipx, uv, rustup).
+    Privileged ones — `fwupd`'s metadata refresh can prompt for admin rights
+    and downloads firmware metadata — are opt-in via `enable = ["fwupd"]`.
+
     Config layout::
 
         [updaters]
-        disable = ["fwupd"]
+        disable = ["pipx"]
+        enable = ["fwupd"]     # opt-in for privileged/network updaters
         custom = { texlive = ["tlmgr", "update", "--all"] }
     """
+    if settings.enable:
+        selected = {name: cls for name, cls in _BUILTINS.items() if name in settings.enable}
+    else:
+        # default set: only no-prompt, user-level updaters
+        selected = {
+            name: cls for name, cls in _BUILTINS.items() if cls.default_enabled
+        }
     out: list[ToolUpdater | CustomUpdater] = []
-    for name, cls in _BUILTINS.items():
+    for name, cls in selected.items():
         if name in settings.disable:
             continue
         updater = cls()

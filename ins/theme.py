@@ -11,10 +11,16 @@ SOFT_BLUE = "#9CC7EB"    # flatpak
 SAGE_GREEN = "#A9C6A0"   # snap
 LAVENDER = "#C2B3E8"     # nix / other / apk
 
-# Status colors
+# Brand + status colors
+ACCENT = "#F2C489"       # soft amber: headers, wordmarks, highlights
 SUCCESS = "#93C793"      # muted green
 ERROR = "#E39A9A"        # muted rose
 DIM = "dim"
+
+# Status glyphs
+CHECK = "✓"
+CROSS = "✗"
+ARROW = "▸"
 
 # Source name -> tag color mapping
 SOURCE_COLORS: dict[str, str] = {

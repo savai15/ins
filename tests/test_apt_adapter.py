@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ins.adapters.apt_adapter import AptAdapter
 
+import output_samples
 from conftest import apt_routes, patch_dpkg_status, patch_runner, patch_which
 
 
@@ -43,6 +44,76 @@ def test_search_fallback_parses_show_blocks(monkeypatch):
     git = next(r for r in results if r.id == "git")
     assert git.installed is False
     assert git.description == "fast, scalable, distributed revision control system"
+
+
+def test_search_fallback_parses_name_desc_lines(monkeypatch):
+    """Real apt-cache prints 'name - description'; names must not leak the
+    description into `apt-cache show` (which would fail with 'No packages
+    found')."""
+    patch_which(monkeypatch, "ins.adapters.apt_adapter", ["apt-get", "apt-cache", "dpkg-query"])
+    patch_dpkg_status(monkeypatch, "ins.adapters.apt_adapter", present=True)
+    routes = [
+        (["apt-cache", "search", "--names-only"], 0, output_samples.APT_CACHE_SEARCH_DESC, ""),
+        (["apt-cache", "show"], 0, output_samples.APT_CACHE_SHOW, ""),
+    ]
+    calls = patch_runner(monkeypatch, "ins.adapters.apt_adapter", routes)
+
+    results = AptAdapter().search("vlc")
+
+    assert calls[1][:3] == ["apt-cache", "show", "vlc"]
+    assert "vlc" in [r.id for r in results]
+    assert all(r.id == r.name for r in results)
+
+
+def test_search_fuzzy_fallback_finds_typo_name(monkeypatch):
+    """apt-cache only matches literally, so `vcl` misses `vlc`; the adapter
+    falls back to fuzzy matching against `apt-cache pkgnames` and surfaces
+    the best name hit first."""
+    patch_which(monkeypatch, "ins.adapters.apt_adapter", ["apt-get", "apt-cache", "dpkg-query"])
+    patch_dpkg_status(monkeypatch, "ins.adapters.apt_adapter", present=True)
+    routes = [
+        (["apt-cache", "search", "--names-only"], 0, "", ""),
+        (["apt-cache", "pkgnames"], 0, "vlc\nwebdavclient\npvclust\ngcc\n", ""),
+        (["apt-cache", "show"], 0, output_samples.APT_CACHE_SHOW, ""),
+    ]
+    calls = patch_runner(monkeypatch, "ins.adapters.apt_adapter", routes)
+
+    results = AptAdapter().search("vcl")
+
+    assert [c[:2] for c in calls] == [
+        ["apt-cache", "search"],
+        ["apt-cache", "pkgnames"],
+        ["apt-cache", "show"],
+    ]
+    assert results[0].id == "vlc"
+    assert results[0].description == "multimedia player and streamer"
+
+
+def test_search_skips_fallback_when_name_matches(monkeypatch):
+    """A literal name match means no pkgnames round trip."""
+    patch_which(monkeypatch, "ins.adapters.apt_adapter", ["apt-get", "apt-cache", "dpkg-query"])
+    patch_dpkg_status(monkeypatch, "ins.adapters.apt_adapter", present=True)
+    calls = patch_runner(monkeypatch, "ins.adapters.apt_adapter", apt_routes())
+
+    AptAdapter().search("vlc")
+
+    assert [c[:2] for c in calls] == [["apt-cache", "search"], ["apt-cache", "show"]]
+
+
+def test_search_rejects_junk_fuzzy_query(monkeypatch):
+    """Long garbage queries must not match short real names: `zzzzqqqq` shares
+    too few letters with `zaz`/`qrq` even though partial_ratio is high."""
+    patch_which(monkeypatch, "ins.adapters.apt_adapter", ["apt-get", "apt-cache", "dpkg-query"])
+    patch_dpkg_status(monkeypatch, "ins.adapters.apt_adapter", present=True)
+    routes = [
+        (["apt-cache", "search", "--names-only"], 0, "", ""),
+        (["apt-cache", "pkgnames"], 0, "zaz\nqrq\nvlc\n", ""),
+    ]
+    patch_runner(monkeypatch, "ins.adapters.apt_adapter", routes)
+
+    results = AptAdapter().search("zzzzqqqq")
+
+    assert results == []
 
 
 def test_list_installed_parses_dpkg_query(monkeypatch):

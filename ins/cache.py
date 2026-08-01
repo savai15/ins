@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ins.models import AppInfo
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _RETRIES = 3
 _RETRY_DELAY = 0.05
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
@@ -12,10 +13,11 @@ from ins.adapters._subprocess import AdapterError
 from ins.adapters.base import SourceAdapter
 from ins.models import AppInfo
 
-DEFAULT_RESULT_CAP = 50
+DEFAULT_RESULT_CAP = 20
 PER_SOURCE_TIMEOUT = 10.0
 MIN_SCORE = 25.0
 INSTALLED_BONUS = 5.0
+TYPO_BONUS = 15.0
 
 # AppStream-style IDs -> canonical short names, so a Flatpak and a native
 # package of the same app collapse into one group.
@@ -186,4 +188,7 @@ class SearchEngine:
             score = 0.6 * ratio + 0.25 * partial + 0.15 * popularity * 100.0
             if group.any_installed:
                 score += INSTALLED_BONUS
+            # transposition typos (`vcl` for `vlc`): same letters, wrong order
+            if Counter(q_norm) == Counter(name_norm) and ratio < 100:
+                score += TYPO_BONUS
             group.score = round(score, 2)

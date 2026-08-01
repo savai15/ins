@@ -1,4 +1,4 @@
-.TH INS 1 "July 2026" "ins 0.2.0" "User Commands"
+.TH INS 1 "August 2026" "ins 0.3.0" "User Commands"
 .SH NAME
 ins \- a universal CLI package search/install tool for Linux
 .SH SYNOPSIS
@@ -14,9 +14,10 @@ zypper, flatpak, snap, nix, and apk behind one interface. Sources are
 auto-detected by tool presence and ranked by a configurable priority; the
 same app from multiple sources is merged into one result.
 .PP
-Running bare
+Running
 .B ins
-on a terminal opens an interactive type-to-filter picker.
+with no options prints the full command list, grouped by category; every
+action takes an explicit flag or subcommand (see below).
 .SH COMMANDS
 .TP
 .B ins -s, --search <query>
@@ -46,7 +47,13 @@ Show a detailed view: description, license, homepage, size, install state
 per source. Optional inline icons on kitty / iTerm2 / WezTerm.
 .TP
 .B ins doctor
-Scan all sources for duplicate installs and offer to resolve them.
+Scan all sources for duplicate installs and offer to resolve them. Ubuntu
+snap-transition stubs (firefox, thunderbird, chromium-browser) are detected
+and skipped, and are listed under
+.B transition_stubs
+in
+.B --json
+output.
 .TP
 .B ins export [file]
 Write installed packages as a TOML manifest (stdout when no file given).
@@ -79,7 +86,10 @@ Machine-readable output for search, info, list, outdated, bundle check,
 doctor, update, history, and dry-run previews.
 .TP
 .B --dry-run
-Show what install/remove/update/upgrade would do without changing anything.
+Show what install/remove/update/upgrade would do without changing anything;
+with
+.BR "ins doctor"
+it scans and reports only (no removal prompts).
 .TP
 .B -q, --quiet
 Suppress informational output; errors are still shown.
@@ -118,9 +128,18 @@ Cache entry cap (oldest entries evicted first).
 .PP
 .B [updaters]
 .RS
+.PP
+Only the no-password, user-level updaters run by default: pipx, uv, and
+rustup.
 .TP
-.B disable = ["fwupd"]
-Skip these built-in updaters (pipx, uv, rustup, fwupd).
+.B disable = ["pipx"]
+Skip these built-in updaters.
+.TP
+.B enable = ["fwupd"]
+Opt-in updaters. fwupd runs
+.BR "fwupdmgr refresh"
+(firmware metadata only), which may prompt for admin rights and downloads
+firmware metadata, so it is off unless listed here.
 .TP
 .B custom = { texlive = ["tlmgr", "update", "--all"] }
 Extra update commands run by
@@ -129,15 +148,8 @@ each is a name mapped to an argv list.
 .RE
 .SH ENVIRONMENT
 .TP
-.B INS_FAKE=1
-Register the demo sources
-.B fake
-and
-.BR fake2 ,
-which simulate a package manager without touching the system.
-.TP
 .B XDG_DATA_HOME
-Base directory for the cache and fake-source state
+Base directory for the cache and per-source state
 (default
 .IR ~/.local/share ).
 .SH EXIT STATUS

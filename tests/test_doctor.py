@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 from ins import cli
 from ins.adapters.apt_adapter import AptAdapter
-from ins.adapters.fake_adapter import FakeAdapter
 from ins.adapters.flatpak_adapter import FlatpakAdapter
 
 from conftest import patch_runner, patch_which
+from fake_adapter import FakeAdapter
 
 
 @pytest.fixture
@@ -58,6 +58,14 @@ def test_doctor_respects_yes_flag_not_auto_removing(dup_env, capsys):
     assert "removed vlc from fake2" in out
 
 
+def test_doctor_dry_run_never_removes(dup_env, capsys, monkeypatch):
+    rc = cli.main(["doctor", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "Duplicate installations" in out
+    assert "removed vlc" not in out
+
+
 def test_doctor_keeps_highest_priority_source(dup_env, capsys, monkeypatch):
     from ins.adapters import registry
 
@@ -83,8 +91,9 @@ def test_doctor_unknown_source_rejected(fake_env, capsys):
 
 
 def test_scan_installed_warns_on_failure(fake_env, capsys, monkeypatch):
-    from ins.adapters import fake_adapter as fa
     from ins.adapters._subprocess import AdapterError
+
+    import fake_adapter as fa
 
     def boom(self):
         raise AdapterError("list failed")
@@ -96,8 +105,57 @@ def test_scan_installed_warns_on_failure(fake_env, capsys, monkeypatch):
     assert "warning: could not scan fake" in err
 
 
-# ----------------------------------------------------- apt adapter info level
+# ------------------------------------------------- snap-transition stub handling
 
+def test_doctor_skips_snap_transition_stub(fake_env, capsys, monkeypatch):
+    """Ubuntu ships apt packages (firefox, thunderbird, …) that are empty
+    wrappers installing the matching snap. Doctor must not treat them as
+    duplicates and must never remove the real snap copy."""
+
+    orig = cli._is_snap_transition_stub
+
+    def stub_check(info):
+        if info.id == "firefox" and info.source == "fake2":
+            return True
+        return orig(info)
+
+    monkeypatch.setattr(cli, "_is_snap_transition_stub", stub_check)
+    cli.main(["-i", "firefox", "-y"])
+    FakeAdapter("fake2").install("firefox")
+    capsys.readouterr()
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+    rc = cli.main(["doctor"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "no duplicate installations found" in out
+    assert "transition stub" in out
+    assert "removed firefox" not in out
+
+
+def test_doctor_json_reports_stubs(fake_env, capsys, monkeypatch):
+    import json as _json
+
+    orig = cli._is_snap_transition_stub
+
+    def stub_check(info):
+        if info.id == "firefox" and info.source == "fake2":
+            return True
+        return orig(info)
+
+    monkeypatch.setattr(cli, "_is_snap_transition_stub", stub_check)
+    cli.main(["-i", "firefox", "-y"])
+    FakeAdapter("fake2").install("firefox")
+    capsys.readouterr()
+    rc = cli.main(["doctor", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["duplicates"] == []
+    assert payload["transition_stubs"] == [
+        {"name": "firefox", "version": "130.0"}
+    ]
+
+
+# ----------------------------------------------------- apt adapter info level
 def test_apt_info_parses_homepage(monkeypatch):
     patch_which(monkeypatch, "ins.adapters.apt_adapter", ["apt-get"])
     from output_samples import APT_CACHE_SHOW

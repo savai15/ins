@@ -12,6 +12,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from rich.box import ROUNDED
 from rich.console import Console
 from rich.live import Live
 from rich.progress import Progress
@@ -25,7 +26,6 @@ from ins.bundle import dumps as manifest_dumps
 from ins.bundle import load_manifest
 from ins.cache import Cache
 from ins.config import DEFAULT_CONFIG_PATH, Config
-from ins.picker import select_package
 from ins.renderer import render_duplicates, render_info, render_list, render_outdated, render_search_results
 from ins.search_engine import NoSourcesError, SearchEngine, normalize_key
 
@@ -176,16 +176,15 @@ def _confirm(prompt: str, args: argparse.Namespace) -> bool:
     return answer.strip().lower() in ("y", "yes")
 
 
-def _stdin_is_tty() -> bool:
-    try:
-        return sys.stdin.isatty()
-    except (ValueError, OSError):
-        return False
-
-
 def _say(args: argparse.Namespace, text: str) -> None:
     if not args.quiet:
         print(text)
+
+
+def _ok(args: argparse.Namespace, text: str) -> None:
+    """Success line: ✓ + muted green on a terminal, plain text elsewhere."""
+    if not args.quiet:
+        Console().print(f"[{theme.SUCCESS}]{theme.CHECK}[/] {text}")
 
 
 def _run_action(args: argparse.Namespace, runner: Callable[[ProgressCallback], object], name: str, console: Console | None = None) -> object:
@@ -218,7 +217,7 @@ def _install_group(group, adapters: list, cache, args: argparse.Namespace) -> in
         cache.invalidate(package_id=info.id, source=info.source)
         cache.mark_installed(info.source, info.id, info.version)
         cache.record("install", info.source, info.id, info.version)
-    _say(args, f"installed {info.name} from {info.source}")
+    _ok(args, f"installed {info.name} from {info.source}")
     return 0
 
 
@@ -232,7 +231,7 @@ def _sanitize_line(line: str) -> str:
 def _run_with_progress(runner: Callable[[ProgressCallback], object], name: str, console: Console) -> object:
     """Run `runner(on_line)` while surfacing output lines in a Progress bar."""
     progress = Progress(console=console)
-    task = progress.add_task(f"[dim]{name}[/dim]", total=None)
+    task = progress.add_task(f"[bold {theme.ACCENT}]{name}[/]", total=None)
     last_line = ""
 
     def on_line(line: str) -> None:
@@ -246,14 +245,15 @@ def _run_with_progress(runner: Callable[[ProgressCallback], object], name: str, 
         return runner(on_line)
 
 
-def _erase_animation(console: Console, name: str) -> None:
+def _erase_animation(console: Console, name: str, source: str = "") -> None:
     """Dim -> collapse -> gone, only on a real terminal."""
     if not console.is_terminal:
         return
+    color = theme.color_for_source(source) if source else theme.ACCENT
     steps = [
-        f"[dim]{name}[/dim]",
-        f"[dim]{name[: max(1, len(name) // 2)]}[/dim]",
-        f"[dim]{name[:1]}[/dim]",
+        f"[{color}]{name}[/]",
+        f"[{color}]{name[: max(1, len(name) // 2)]}[/]",
+        f"[{color}]{name[:1]}[/]",
         "",
     ]
     with Live(console=console) as live:
@@ -446,12 +446,12 @@ def cmd_remove(args: argparse.Namespace) -> int:
             print(f"error: failed to remove {target.name}: {exc}", file=sys.stderr)
             rc = 1
             continue
-        _erase_animation(Console(), target.name)
+        _erase_animation(Console(), target.name, target.source)
         if cache is not None:
             cache.invalidate(package_id=target.id, source=target.source)
             cache.mark_removed(target.source, target.id)
             cache.record("remove", target.source, target.id, target.version)
-        _say(args, f"removed {target.name} from {target.source}")
+        _ok(args, f"removed {target.name} from {target.source}")
     if args.dry_run:
         if args.json:
             print(json.dumps({"dry_run": True, "action": "remove", "packages": rows}, indent=2))
@@ -471,7 +471,7 @@ def cmd_update(args: argparse.Namespace) -> int:
         return 1
     from ins.updaters import CustomUpdater, detect_updaters
 
-    # updaters are skipped when --s restricts the run to specific sources
+    # tool updaters are skipped when --s restricts the run to specific sources
     updaters = [] if args.sources else detect_updaters(config.updaters)
     if args.dry_run:
         payload: dict[str, int] = {}
@@ -543,8 +543,7 @@ def cmd_update(args: argparse.Namespace) -> int:
         if total:
             if not args.quiet:
                 console.print(
-                    f"{total} packages updated across {', '.join(sources_ok)}",
-                    style=theme.SUCCESS,
+                    f"[{theme.SUCCESS}]{theme.CHECK}[/] {total} packages updated across {', '.join(sources_ok)}"
                 )
         else:
             _say(args, "all sources up to date")
@@ -569,24 +568,6 @@ def cmd_list(args: argparse.Namespace) -> int:
         return 0
     render_list(Console(), installed)
     return 0
-
-
-def cmd_interactive(args: argparse.Namespace) -> int:
-    """Bare `ins` on a terminal: type-to-filter picker, enter installs."""
-    config, adapters, cache, errors = _build_context(args)
-    if errors:
-        print(f"error: {'; '.join(errors)}", file=sys.stderr)
-        return 2
-    if not adapters:
-        print("error: no package sources detected on this system", file=sys.stderr)
-        return 1
-    engine = SearchEngine(adapters, cache=cache, ttl=config.cache.ttl_seconds)
-    console = Console()
-    console.print("[dim]press enter to install, ctrl-c to quit[/dim]")
-    group = select_package(engine, console)
-    if group is None:
-        return 0
-    return _install_group(group, adapters, cache, args)
 
 
 def cmd_outdated(args: argparse.Namespace) -> int:
@@ -693,7 +674,7 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
             cache.invalidate(package_id=target.id, source=target.source)
             cache.mark_installed(target.source, target.id, "")
             cache.record("upgrade", target.source, target.id)
-        _say(args, f"upgraded {target.name} from {target.source}")
+        _ok(args, f"upgraded {target.name} from {target.source}")
     if args.dry_run and args.json:
         print(json.dumps({"dry_run": True, "action": "upgrade", "packages": rows}, indent=2))
     return rc
@@ -835,6 +816,21 @@ def _render_health(console: Console, adapters: list, cache, config) -> None:
     console.print(f"[bold]config:[/bold] {DEFAULT_CONFIG_PATH}")
 
 
+def _is_snap_transition_stub(info) -> bool:
+    """True for Ubuntu's snap-transition apt packages (firefox, thunderbird,
+    chromium-browser, …) — empty wrappers that only install the matching snap.
+    Their version carries the `1snap` marker and/or their description says
+    'Installs <name> snap…'. Treating them as real installs makes doctor
+    'duplicates' point at the wrong copy and can remove the actual app."""
+    if info.source != "apt":
+        return False
+    version = (info.version or "").lower()
+    if "1snap" in version:
+        return True
+    desc = (info.description or "").lower()
+    return "installs " in desc and " snap" in desc
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     config, adapters, cache, errors = _build_context(args)
     if errors:
@@ -847,8 +843,16 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     with console.status("[dim]scanning installed packages…[/dim]"):
         installed = _scan_installed(adapters)
 
+    # Ubuntu ships snap-transition apt packages (e.g. firefox, chromium-browser,
+    # thunderbird) that are empty wrappers installing the real snap. They look
+    # like duplicates but are not: never treat them as the real install, and
+    # never count them toward duplicate detection.
+    stubs = [i for i in installed if _is_snap_transition_stub(i)]
+
     groups: dict[str, list] = {}
     for info in installed:
+        if _is_snap_transition_stub(info):
+            continue
         key = normalize_key(info.name) or normalize_key(info.id)
         if not key:
             continue
@@ -869,6 +873,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 }
                 for _key, infos in duplicates
             ],
+            "transition_stubs": [
+                {"name": s.name, "version": s.version} for s in stubs
+            ],
             "sources": {
                 "detected": [a.name for a in adapters],
                 "known": len(registry.known_sources()),
@@ -879,8 +886,15 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             payload["cache"] = {k: v for k, v in stats.items() if k != "path"}
         print(json.dumps(payload, indent=2))
         return 0
+    for stub in stubs:
+        console.print(
+            f"[{theme.DIM}]note: {stub.name}: apt copy is a snap-transition stub, "
+            "not a real duplicate — skipped[/]"
+        )
     render_duplicates(console, duplicates)
     _render_health(console, adapters, cache, config)
+    if args.dry_run:
+        return 0
 
     rc = 0
     for _key, infos in duplicates:
@@ -908,12 +922,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 print(f"error: failed to remove {info.name} from {info.source}: {exc}", file=sys.stderr)
                 rc = 1
                 continue
-            _erase_animation(Console(), info.name)
+            _erase_animation(Console(), info.name, info.source)
             if cache is not None:
                 cache.invalidate(package_id=info.id, source=info.source)
                 cache.mark_removed(info.source, info.id)
                 cache.record("remove", info.source, info.id)
-            _say(args, f"removed {info.name} from {info.source}")
+            _ok(args, f"removed {info.name} from {info.source}")
     return rc
 
 
@@ -937,9 +951,16 @@ def cmd_history(args: argparse.Namespace) -> int:
         return 0
     console = Console()
     if not records:
-        console.print("[dim]no transactions recorded yet[/]")
+        console.print(f"[dim]{theme.ARROW} no transactions recorded yet[/]")
         return 0
-    table = Table(box=None, header_style="bold", pad_edge=False, collapse_padding=True)
+    table = Table(
+        box=ROUNDED,
+        border_style="dim",
+        title=f"[{theme.ACCENT}]transaction history[/]",
+        header_style=f"bold {theme.ACCENT}",
+        pad_edge=False,
+        collapse_padding=True,
+    )
     table.add_column("When")
     table.add_column("Action")
     table.add_column("Package")
@@ -961,7 +982,7 @@ def cmd_undo(args: argparse.Namespace) -> int:
         return 1
     record = cache.undo_target()
     if record is None:
-        print("nothing to undo")
+        _say(args, "nothing to undo")
         return 0
     action = record["action"]
     source = record["source"]
@@ -995,13 +1016,13 @@ def cmd_undo(args: argparse.Namespace) -> int:
             if cache is not None:
                 cache.mark_removed(source, package)
                 cache.invalidate(package_id=package, source=source)
-            _say(args, f"undid install of {package} from {source}")
+            _ok(args, f"undid install of {package} from {source}")
         else:
             _run_action(args, lambda cb: adapter.install(package, on_progress=cb), package)
             if cache is not None:
                 cache.invalidate(package_id=package, source=source)
                 cache.mark_installed(source, package, version)
-            _say(args, f"undid remove of {package} from {source}")
+            _ok(args, f"undid remove of {package} from {source}")
     except AdapterError as exc:
         print(f"error: failed to undo: {exc}", file=sys.stderr)
         return 1
@@ -1046,7 +1067,7 @@ def _bundle_report(args: argparse.Namespace, report: dict) -> int:
         )
         return 1 if drift else 0
     if not drift:
-        console.print(f"[{theme.SUCCESS}]bundle is up to date[/]")
+        console.print(f"[{theme.SUCCESS}]{theme.CHECK}[/] bundle is up to date")
         if report["extra"]:
             console.print(f"[dim]{len(report['extra'])} extra package(s) installed but not in manifest[/]")
         return 0
@@ -1060,7 +1081,7 @@ def _bundle_report(args: argparse.Namespace, report: dict) -> int:
 def _bundle_install(args: argparse.Namespace, report: dict, adapters: list, cache) -> int:
     console = Console()
     if not report["missing"] and not report["mismatched"]:
-        console.print(f"[{theme.SUCCESS}]bundle is up to date[/]")
+        console.print(f"[{theme.SUCCESS}]{theme.CHECK}[/] bundle is up to date")
         return 0
     for source, pkg, got, want in report["mismatched"]:
         print(f"note: {pkg} ({source}) is {got}, manifest requires {want} — use `ins -U` to upgrade")
@@ -1089,7 +1110,7 @@ def _bundle_install(args: argparse.Namespace, report: dict, adapters: list, cach
             cache.invalidate(package_id=pkg, source=source)
             cache.mark_installed(source, pkg, "")
             cache.record("install", source, pkg)
-        _say(args, f"installed {pkg} from {source}")
+        _ok(args, f"installed {pkg} from {source}")
     return rc
 
 
@@ -1176,6 +1197,80 @@ def cmd_completions(args: argparse.Namespace) -> int:
 
 # ------------------------------------------------------------- dispatch
 
+_COMMAND_LIST = [
+    (
+        "search & install",
+        [
+            ("-s, --search <query>", "search all sources, typo-tolerant, merged and ranked"),
+            ("-i, --install <pkg>...", "install one or more packages (confirm + live progress)"),
+            ("-r, --remove <pkg>...", "remove one or more installed packages"),
+            ("-U, --upgrade <pkg>...", "upgrade one or more installed packages"),
+            ("info <pkg>", "detailed view of a package"),
+        ],
+    ),
+    (
+        "maintain",
+        [
+            ("-u, --update", "refresh every source's index, then tool updaters"),
+            ("-l, --list", "list installed packages grouped by source"),
+            ("-o, --outdated", "show packages with newer versions available"),
+            ("doctor", "scan for duplicate installs across sources"),
+            ("history [n]", "show recent transactions (default 20)"),
+            ("undo", "reverse the last install or remove"),
+        ],
+    ),
+    (
+        "share",
+        [
+            ("export [file]", "write installed packages as a TOML manifest"),
+            ("bundle check <file>", "drift report: manifest vs installed packages"),
+            ("bundle install <file>", "install packages a manifest is missing"),
+            ("completions <shell|packages>", "print a completion script or package names"),
+        ],
+    ),
+    (
+        "options",
+        [
+            ("-y, --yes", "assume yes to all prompts (scripting)"),
+            ("--dry-run", "show what would change without changing anything"),
+            ("--json", "machine-readable output"),
+            ("--source <src>...", "restrict the action to specific sources"),
+            ("-q, --quiet", "suppress informational output"),
+            ("--no-progress", "run without the live progress bar"),
+            ("-h, --help", "show this help"),
+            ("-v, --version", "show version"),
+        ],
+    ),
+]
+
+
+def cmd_help() -> int:
+    """Bare `ins`: a good-looking list of every command and option."""
+    console = Console()
+    console.print(
+        f"[bold {theme.ACCENT}]ins — universal CLI package search/install tool for Linux[/]\n"
+    )
+    for title, rows in _COMMAND_LIST:
+        table = Table(
+            box=ROUNDED,
+            border_style="dim",
+            title=f"[{theme.ACCENT}]{title}[/]",
+            header_style=f"bold {theme.ACCENT}",
+            pad_edge=False,
+            collapse_padding=True,
+        )
+        table.add_column("Command")
+        table.add_column("Description", style=theme.DIM)
+        for command, description in rows:
+            escaped = command.replace("[", "\\[")
+            table.add_row(f"[bold]{escaped}[/]", description)
+        console.print(table)
+    console.print(
+        f"[dim]{theme.ARROW} every action needs an explicit flag or subcommand[/]"
+    )
+    return 0
+
+
 def dispatch(args: argparse.Namespace) -> int:
     chosen = []
     if args.command == "doctor":
@@ -1240,22 +1335,23 @@ def dispatch(args: argparse.Namespace) -> int:
         return cmd_outdated(args)
     if "upgrade" in chosen:
         return cmd_upgrade(args)
-    if _stdin_is_tty():
-        return cmd_interactive(args)
-    print(
-        "error: no action given — use -s/--search, -i/--install, -r/--remove, "
-        "-u/--update, -l/--list, -o/--outdated, -U/--upgrade, "
-        "or `ins doctor` / `ins info <pkg>` / `ins export` / `ins bundle check|install <file>`"
-        " / `ins history` / `ins undo` / `ins completions <shell|packages>`",
-        file=sys.stderr,
-    )
-    return 2
+    return cmd_help()
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return dispatch(args)
+    try:
+        return dispatch(args)
+    except BrokenPipeError:
+        # Consumer (e.g. `ins -l | head`) closed the pipe: exit quietly
+        # instead of dumping "Exception ignored while flushing" noise.
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except OSError:
+            pass
+        return 1
 
 
 if __name__ == "__main__":

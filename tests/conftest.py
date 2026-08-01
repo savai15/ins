@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import importlib
+import sys
 
 import pytest
 from ins.adapters._subprocess import CommandFailed
-from ins.adapters.fake_adapter import FakeAdapter
 from ins.cache import Cache
 from ins.config import Config
 
+import fake_adapter
 import output_samples
 
 
@@ -125,24 +126,68 @@ def flatpak_routes() -> list[tuple[list[str], int, str, str]]:
 
 
 @pytest.fixture(autouse=True)
+def _no_real_subprocesses(monkeypatch):
+    """Make accidental real command execution impossible during tests.
+
+    Ubuntu test boxes ship real apt, snap, fwupdmgr, pkexec, etc. Any test
+    path that reaches the real `ins.adapters._subprocess` would execute for
+    real — e.g. `fwupdmgr refresh` popping a polkit password prompt or a real
+    `apt-get install` under pkexec. Replace the four run functions with
+    hard-fail stubs; per-test `patch_runner` overrides them intentionally.
+    """
+    from ins.adapters import _subprocess as sp
+
+    def _block(*_args, **_kwargs):
+        raise AssertionError(
+            "test attempted a real subprocess call; stub it with patch_runner"
+        )
+
+    for _name in ("run", "run_stream", "run_privileged", "run_privileged_stream"):
+        monkeypatch.setattr(sp, _name, _block)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _no_python_apt(monkeypatch):
+    """Force the subprocess fallback paths in the adapters.
+
+    The apt adapter prefers python-apt when `import apt` succeeds (as it does on
+    Ubuntu systems), which bypasses the stubbed subprocess layer. Tests target
+    the apt-cache/dpkg-query fallback, so block the import everywhere.
+    """
+    monkeypatch.setitem(sys.modules, "apt", None)
+    monkeypatch.setitem(sys.modules, "apt_pkg", None)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _clean_fake_state(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
-    from ins.adapters import fake_adapter
-
     fake_adapter._STATE.clear()
     yield
     fake_adapter._STATE.clear()
 
 
 @pytest.fixture
-def fake_pair() -> list[FakeAdapter]:
-    return [FakeAdapter("fake"), FakeAdapter("fake2")]
+def fake_pair() -> list[fake_adapter.FakeAdapter]:
+    return [fake_adapter.FakeAdapter("fake"), fake_adapter.FakeAdapter("fake2")]
 
 
 @pytest.fixture
 def fake_env(monkeypatch, tmp_path):
-    """INS_FAKE=1 + a temp cache db + default config, for CLI tests."""
-    monkeypatch.setenv("INS_FAKE", "1")
+    """Sandboxed CLI environment: only the test double sources exist and no
+    real tool updaters can run. Backs all end-to-end CLI tests."""
+    from ins.adapters import registry
+
+    monkeypatch.setattr(
+        registry,
+        "_instances",
+        lambda: [fake_adapter.FakeAdapter("fake"), fake_adapter.FakeAdapter("fake2")],
+    )
+    monkeypatch.setattr(
+        "ins.updaters.detect_updaters",
+        lambda settings: [],
+    )
     monkeypatch.setattr(
         "ins.cli.Cache",
         lambda enabled, max_entries=5000: Cache(tmp_path / "cache.db", enabled=enabled, max_entries=max_entries),

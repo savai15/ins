@@ -29,12 +29,17 @@ class CacheSettings:
 
 @dataclass(slots=True)
 class UpdaterSettings:
-    """`ins -u` extras: disabled builtin updaters + custom update commands.
+    """`ins -u` extras: disabled/enabled builtin updaters + custom commands.
 
-    Custom commands are plain argv lists, e.g. `texlive = ["tlmgr", "update", "--all"]`.
+    By default only the no-password, user-level updaters run (pipx, uv,
+    rustup). Privileged ones like `fwupd` (its metadata refresh can pop an
+    admin-auth dialog and download firmware metadata) are opt-in: list them
+    under `enable`. Custom commands are plain argv lists, e.g.
+    `texlive = ["tlmgr", "update", "--all"]`.
     """
 
     disable: list[str] = field(default_factory=list)
+    enable: list[str] = field(default_factory=list)
     custom: dict[str, list[str]] = field(default_factory=dict)
 
 
@@ -54,6 +59,7 @@ class Config:
 
         [updaters]
         disable = ["fwupd"]
+        enable = ["fwupd"]   # opt-in for privileged/network updaters
         custom = { texlive = ["tlmgr", "update", "--all"] }
     """
 
@@ -94,6 +100,9 @@ class Config:
             disable = updaters.get("disable")
             if isinstance(disable, list):
                 cfg.updaters.disable = [str(d) for d in disable]
+            enable = updaters.get("enable")
+            if isinstance(enable, list):
+                cfg.updaters.enable = [str(e) for e in enable]
             custom = updaters.get("custom")
             if isinstance(custom, dict):
                 for name, command in custom.items():
@@ -107,6 +116,7 @@ class Config:
             "cache": asdict(self.cache),
             "updaters": {
                 "disable": self.updaters.disable,
+                "enable": self.updaters.enable,
                 "custom": self.updaters.custom,
             },
         }

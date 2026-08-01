@@ -18,6 +18,30 @@ from ins.updaters import (
 
 from conftest import patch_runner, patch_which
 
+
+@pytest.fixture
+def updater_env(monkeypatch, tmp_path):
+    """Like `fake_env`, but without the detect_updaters stub so `ins -u`
+    exercises real tool updaters — with sources pinned to the test doubles so
+    nothing real is touched and no root/polkit prompt can fire."""
+    from ins.adapters import registry
+    from ins.cache import Cache
+    from ins.config import Config
+
+    from fake_adapter import FakeAdapter
+
+    monkeypatch.setattr(
+        "ins.cli.Cache",
+        lambda enabled, max_entries=5000: Cache(tmp_path / "cache.db", enabled=enabled, max_entries=max_entries),
+    )
+    monkeypatch.setattr("ins.config.Config.load", lambda *a, **kw: Config())
+    monkeypatch.setattr(
+        registry,
+        "_instances",
+        lambda: [FakeAdapter("fake"), FakeAdapter("fake2")],
+    )
+    return tmp_path
+
 PIPX_OUT = (
     "upgraded package black from 24.4.2 to 24.8.0\n"
     "upgraded package ruff from 0.5.7 to 0.6.2\n"
@@ -125,7 +149,15 @@ def test_updater_failure_raises_adapter_error(monkeypatch):
 def test_detect_updaters_available_and_enabled(monkeypatch):
     patch_which(monkeypatch, "ins.updaters", ["pipx", "uv", "rustup", "fwupdmgr"])
     found = detect_updaters(Config().updaters)
-    assert [u.name for u in found] == ["pipx", "uv", "rustup", "fwupd"]
+    assert [u.name for u in found] == ["pipx", "uv", "rustup"]
+
+
+def test_detect_updaters_fwupd_is_opt_in(monkeypatch):
+    patch_which(monkeypatch, "ins.updaters", ["pipx", "uv", "rustup", "fwupdmgr"])
+    cfg = Config()
+    cfg.updaters.enable = ["fwupd"]
+    found = detect_updaters(cfg.updaters)
+    assert [u.name for u in found] == ["fwupd"]
 
 
 def test_detect_updaters_respects_disable(monkeypatch):
@@ -170,7 +202,7 @@ def test_config_roundtrip_updaters(tmp_path):
 
 # ---------------------------------------------------------------- CLI level
 
-def test_update_runs_detected_updaters(fake_env, capsys, monkeypatch):
+def test_update_runs_detected_updaters(updater_env, capsys, monkeypatch):
     patch_which(monkeypatch, "ins.updaters", ["pipx", "uv"])
     patch_runner(
         monkeypatch,
@@ -190,7 +222,7 @@ def test_update_runs_detected_updaters(fake_env, capsys, monkeypatch):
     assert "uv: 1 update(s)" in out
 
 
-def test_update_updaters_idle_message(fake_env, capsys, monkeypatch):
+def test_update_updaters_idle_message(updater_env, capsys, monkeypatch):
     patch_which(monkeypatch, "ins.updaters", ["pipx"])
     patch_runner(monkeypatch, "ins.updaters", [(["pipx", "upgrade-all"], 0, PIPX_IDLE, "")])
 
@@ -201,7 +233,7 @@ def test_update_updaters_idle_message(fake_env, capsys, monkeypatch):
     assert "pipx: up to date" in out
 
 
-def test_update_custom_updater_from_config(fake_env, capsys, monkeypatch):
+def test_update_custom_updater_from_config(updater_env, capsys, monkeypatch):
     cfg = Config()
     cfg.updaters.custom = {"texlive": ["tlmgr", "update", "--all"]}
     monkeypatch.setattr("ins.config.Config.load", lambda *a, **kw: cfg)
@@ -215,7 +247,7 @@ def test_update_custom_updater_from_config(fake_env, capsys, monkeypatch):
     assert "texlive: ran" in out
 
 
-def test_update_updater_failure_raises_cli_error(fake_env, capsys, monkeypatch):
+def test_update_updater_failure_raises_cli_error(updater_env, capsys, monkeypatch):
     patch_which(monkeypatch, "ins.updaters", ["pipx"])
     patch_runner(monkeypatch, "ins.updaters", [(["pipx", "upgrade-all"], 1, "", "network down")])
 
@@ -240,7 +272,7 @@ def test_update_skips_updaters_with_source_filter(fake_env, capsys, monkeypatch)
     assert calls == []
 
 
-def test_update_updaters_json(fake_env, capsys, monkeypatch):
+def test_update_updaters_json(updater_env, capsys, monkeypatch):
     import json as _json
 
     patch_which(monkeypatch, "ins.updaters", ["pipx", "uv"])
@@ -263,7 +295,7 @@ def test_update_updaters_json(fake_env, capsys, monkeypatch):
     assert payload["total"] == 6
 
 
-def test_update_updaters_dry_run(fake_env, capsys, monkeypatch):
+def test_update_updaters_dry_run(updater_env, capsys, monkeypatch):
     import json as _json
 
     patch_which(monkeypatch, "ins.updaters", ["pipx"])

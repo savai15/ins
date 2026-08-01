@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from ins.adapters.apk_adapter import ApkAdapter
 from ins.adapters.apt_adapter import AptAdapter
 from ins.adapters.base import SourceAdapter
@@ -27,22 +25,12 @@ REGISTERED = (
 
 
 def _instances() -> list[SourceAdapter]:
-    out: list[SourceAdapter] = []
-    if os.environ.get("INS_FAKE"):
-        from ins.adapters.fake_adapter import FakeAdapter
-
-        out.append(FakeAdapter("fake"))
-        out.append(FakeAdapter("fake2"))
-    out.extend(cls() for cls in REGISTERED)
-    return out
+    return [cls() for cls in REGISTERED]
 
 
 def known_sources() -> list[str]:
     """All source names the tool can speak, available or not."""
-    names = [cls.name for cls in REGISTERED]
-    if os.environ.get("INS_FAKE"):
-        names = ["fake", "fake2", *names]
-    return names
+    return [cls.name for cls in REGISTERED]
 
 
 def detect_sources(config) -> list[SourceAdapter]:

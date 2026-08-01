@@ -40,7 +40,7 @@ def test_update_unknown_source(fake_env, capsys):
 
 
 def test_update_failure_reported(fake_env, capsys, monkeypatch):
-    from ins.adapters import fake_adapter as fa
+    import fake_adapter as fa
 
     def boom(self, on_progress=None):
         raise AdapterError("refresh failed")

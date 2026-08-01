@@ -1,19 +1,15 @@
-"""Demo adapter for exercising ins end-to-end without a real package manager.
+"""Private test double: a deterministic in-memory package source.
 
-Only registered when INS_FAKE=1 is set in the environment; it is never active
-on a real system unless explicitly requested for a demo.
+Not shipped with the product and never registered on real systems — it
+exists only so CLI/engine tests can exercise every flow end-to-end without
+touching a real package manager.
 """
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-
-from rapidfuzz import fuzz
-
 from ins.adapters.base import SourceAdapter
 from ins.models import AppInfo
+from rapidfuzz import fuzz
 
 CATALOG = [
     AppInfo(id="vlc", name="vlc", description="VLC media player - the portable version", version="3.0.20", size=25432064, popularity=0.95),
@@ -30,30 +26,11 @@ CATALOG = [
 _STATE: dict[str, set[str]] = {}
 
 
-def _state_file(name: str) -> Path:
-    data_home = os.environ.get("XDG_DATA_HOME")
-    base = Path(data_home) if data_home else Path.home() / ".local" / "share"
-    return base / "ins" / f"fake_{name}.json"
-
-
 class FakeAdapter(SourceAdapter):
     def __init__(self, name: str = "fake"):
         self.name = name
         self.priority = 5 if name == "fake" else 6
-        self._file = _state_file(name)
         _STATE.setdefault(self.name, set())
-        if self._file.is_file():
-            try:
-                _STATE[self.name] = set(json.loads(self._file.read_text(encoding="utf-8-sig")))
-            except (ValueError, OSError):
-                _STATE[self.name] = set()
-
-    def _save(self) -> None:
-        try:
-            self._file.parent.mkdir(parents=True, exist_ok=True)
-            self._file.write_text(json.dumps(sorted(_STATE[self.name])), encoding="utf-8")
-        except OSError:
-            pass
 
     def is_available(self) -> bool:
         return True
@@ -94,7 +71,6 @@ class FakeAdapter(SourceAdapter):
     def install(self, package_id: str, on_progress=None) -> bool:
         if any(info.id == package_id for info in CATALOG):
             _STATE[self.name].add(package_id)
-            self._save()
             if on_progress is not None:
                 on_progress(f"Installing: {package_id}")
                 on_progress("Done.")
@@ -104,7 +80,6 @@ class FakeAdapter(SourceAdapter):
     def remove(self, package_id: str, on_progress=None) -> bool:
         if package_id in _STATE[self.name]:
             _STATE[self.name].discard(package_id)
-            self._save()
             if on_progress is not None:
                 on_progress(f"Removing: {package_id}")
                 on_progress("Done.")

@@ -7,11 +7,11 @@ from io import StringIO
 from ins import cli
 from ins.adapters._subprocess import iter_stream
 from ins.adapters.apt_adapter import AptAdapter
-from ins.adapters.fake_adapter import FakeAdapter
 from ins.adapters.flatpak_adapter import FlatpakAdapter
 from rich.console import Console
 
 from conftest import flatpak_routes, patch_runner, patch_which
+from fake_adapter import FakeAdapter
 
 # ----------------------------------------------------------- iter_stream
 
@@ -81,7 +81,7 @@ def test_fake_adapter_emits_progress_lines():
 # ------------------------------------------------------- CLI integration
 
 def test_cli_passes_progress_callback_to_adapter(fake_env, capsys, monkeypatch):
-    from ins.adapters import fake_adapter as fa
+    import fake_adapter as fa
 
     captured = {}
     original = fa.FakeAdapter.install

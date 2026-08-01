@@ -5,9 +5,10 @@ from __future__ import annotations
 import pytest
 from ins.adapters._subprocess import AdapterError
 from ins.adapters.base import SourceAdapter
-from ins.adapters.fake_adapter import FakeAdapter
 from ins.models import AppInfo
 from ins.search_engine import GroupedResult, NoSourcesError, SearchEngine, normalize_key
+
+from fake_adapter import FakeAdapter
 
 
 def test_dedup_merges_same_app_across_sources(fake_pair):

@@ -1,4 +1,4 @@
-"""CLI tests: end-to-end flows using the INS_FAKE demo adapters."""
+"""CLI tests: end-to-end flows against the private fake adapters."""
 
 from __future__ import annotations
 
@@ -142,11 +142,14 @@ def test_update_all_sources(fake_env, capsys):
     assert "packages updated across fake, fake2" in out
 
 
-def test_no_action_rejected(fake_env, capsys):
+def test_bare_ins_shows_command_list(fake_env, capsys):
     rc = cli.main([])
-    err = capsys.readouterr().err
-    assert rc == 2
-    assert "no action given" in err
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "--search" in captured.out
+    assert "doctor" in captured.out
+    assert "bundle install <file>" in captured.out
+    assert captured.err == ""
 
 
 def test_list_shows_installed_grouped_by_source(fake_env, capsys, tmp_path):
@@ -619,7 +622,7 @@ def test_undo_reinstalls_last_remove(fake_env, capsys, tmp_path):
 
 
 def test_undo_guards_install_state_change(fake_env, capsys):
-    from ins.adapters.fake_adapter import FakeAdapter
+    from fake_adapter import FakeAdapter
 
     cli.main(["-i", "vlc", "-y"])
     capsys.readouterr()
@@ -633,7 +636,7 @@ def test_undo_guards_install_state_change(fake_env, capsys):
 
 
 def test_undo_guards_remove_state_change(fake_env, capsys):
-    from ins.adapters.fake_adapter import FakeAdapter
+    from fake_adapter import FakeAdapter
 
     cli.main(["-i", "vlc", "-y"])
     capsys.readouterr()
@@ -693,7 +696,7 @@ def test_no_progress_still_installs(fake_env, capsys, tmp_path):
 def test_doctor_json(fake_env, capsys):
     import json as _json
 
-    from ins.adapters.fake_adapter import FakeAdapter
+    from fake_adapter import FakeAdapter
 
     cli.main(["-i", "vlc", "-y"])
     capsys.readouterr()

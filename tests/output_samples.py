@@ -47,6 +47,13 @@ vlc-plugin-access-extra
 vlc-plugin-qt
 """
 
+# Real apt-cache output on Ubuntu: "name - short description" per line.
+APT_CACHE_SEARCH_DESC = """\
+vlc - multimedia player and streamer
+vlc-bin - metapackage providing the VLC multimedia player
+vlc-plugin-qt - Qt plugin for VLC
+"""
+
 DPKG_QUERY_W = """\
 adduser\t3.134
 bash\t5.2.15-2+b2

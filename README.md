@@ -15,23 +15,25 @@ detection, and per-package detail views across every source on your system.
   results so the same app from multiple sources shows up once.
 - **Unified search** — parallel queries with typo tolerance
   (`ins -s vcl` still finds VLC), deduplicated and ranked by relevance +
-  popularity, capped at 50 results.
-- **Interactive picker** — bare `ins` on a terminal opens a type-to-filter,
-  arrow-key search/install UI (ctrl-c to quit).
+  popularity, capped at 20 results.
 - **Safe install/remove** — `pkexec` with a `sudo` fallback, live progress
   from the real package-manager output, confirm-before-install with sizes
   (`-y` skips prompts for scripting).
 - **`--dry-run`** — see exactly what install/remove/update/upgrade would do
   (versions, sizes, per-source counts) without touching the system.
 - **`ins doctor`** — flags apps installed twice (e.g. `vlc` via apt *and*
-  flatpak) and offers to clean up.
+  flatpak) and offers to clean up; Ubuntu snap-transition stubs
+  (firefox/thunderbird/chromium-browser wrappers) are detected and skipped,
+  so removing the duplicate never deletes the real app.
 - **`ins info`** — license, homepage, size, version, and install state per
   source, in one glance.
 - **`ins -u`** — updates every detected source in sequence with a summary,
   plus tool updaters: `pipx upgrade-all`, `uv tool upgrade --all`,
-  `rustup update`, `fwupdmgr refresh` (firmware metadata only — flashing is
-  interactive for a reason), and any custom commands from
+  `rustup update`, and any custom commands from
   `~/.config/ins/config.toml` (`[updaters] custom = { texlive = ["tlmgr", "update", "--all"] }`).
+  Only no-password updaters run by default; `fwupdmgr refresh` (firmware
+  metadata) is opt-in via `enable = ["fwupd"]` because it can prompt for
+  admin rights and downloads firmware metadata.
 - **`ins -l` / `ins -o` / `ins -U <pkg>...`** — list installed packages,
   see which have newer versions available, and upgrade them individually.
 - **`ins export` / `ins bundle`** — declarative provisioning: dump what's
@@ -93,55 +95,89 @@ man ins
 
 ## Quick start
 
-Just `ins` on a terminal — type to filter, arrows to move, enter to install:
+Every action takes an explicit flag or subcommand — bare `ins` prints the
+grouped command list (search & install / maintain / share / options):
 
 ```text
 $ ins
-▸ vlc [fake] 3.0.20          VLC media player - the portable version
-  git [fake] 2.45.2           fast, scalable, distributed revision control
-type to filter · ↑/↓ move · enter install · ctrl-c quit
+ins — universal CLI package search/install tool for Linux
+
+                     search & install
+╭──────────────────┬──────────────────────────────────────────────╮
+│Command           │Description                                   │
+├──────────────────┼──────────────────────────────────────────────┤
+│-s, --search <q>  │search all sources, typo-tolerant, merged &   │
+│                  │ranked                                        │
+│-i, --install     │install one or more packages (confirm + live  │
+│<pkg>...          │progress)                                     │
+│-r, --remove      │remove one or more installed packages         │
+│<pkg>...          │                                              │
+│-U, --upgrade     │upgrade one or more installed packages        │
+│<pkg>...          │                                              │
+│info <pkg>        │detailed view of a package                    │
+╰──────────────────┴──────────────────────────────────────────────╯
+                    maintain
+╭──────────────┬─────────────────────────────────────────────────╮
+│Command       │Description                                      │
+├──────────────┼─────────────────────────────────────────────────┤
+│-u, --update  │refresh every source's index, then tool updaters │
+│-l, --list    │list installed packages grouped by source        │
+│-o, --outdated│show packages with newer versions available      │
+│doctor        │scan for duplicate installs across sources       │
+│history [n]   │show recent transactions (default 20)            │
+│undo          │reverse the last install or remove               │
+╰──────────────┴─────────────────────────────────────────────────╯
+                    share
+╭────────────────────────────┬───────────────────────────────────╮
+│Command                     │Description                        │
+├────────────────────────────┼───────────────────────────────────┤
+│export [file]               │write installed packages as a TOML │
+│                            │manifest                           │
+│bundle check <file>         │drift report: manifest vs          │
+│                            │installed packages                 │
+│bundle install <file>       │install packages a manifest is     │
+│                            │missing                            │
+│completions <shell\|packages>│print a completion script or       │
+│                            │package names                      │
+╰────────────────────────────┴───────────────────────────────────╯
 ```
 
-Or search directly:
-
-```text
-$ ins -s vlc
-'vlc'
-Package                       Description
-vlc [fake] 3.0.20 [installed] VLC media player - the portable version
-also via: fake2
-```
-
-Typo-tolerant, deduplicated, ranked:
+Or search directly — merged across sources, deduplicated, typo-tolerant:
 
 ```text
 $ ins -s vcl
 'vcl'
-Package                  Description
-vlc [fake] 3.0.20        VLC media player - the portable version
-also via: fake2
+╭───────────────────────────────────┬───────────────────────────────────────╮
+│Package                            │Description                            │
+├───────────────────────────────────┼───────────────────────────────────────┤
+│vlc [apt] 3.0.23-1                 │VLC is the VideoLAN project's media    │
+│also via: snap                     │player. It plays MPEG, MPEG-2, MPEG-4, │
+╰───────────────────────────────────┴───────────────────────────────────────╯
 ```
 
 Install (batch works too), with live progress:
 
 ```text
 $ ins -i vlc git -y
-installed vlc from fake
-installed git from fake
+✓ installed vlc from apt
+✓ installed git from apt
 ```
 
 Remove with a dim→collapse→gone erase animation on real terminals:
 
 ```text
 $ ins -r vlc -y
-removed vlc from fake
+✓ removed vlc from apt
 ```
 
-Update everything, with a summary:
+Update every source plus tool updaters, with a summary:
 
 ```text
 $ ins -u
-6 packages updated across fake, fake2
+apt: up to date
+snap: 2 update(s)
+pipx: ran
+✓ 2 packages updated across snap
 ```
 
 See what's installed and what has updates, then upgrade:
@@ -149,23 +185,30 @@ See what's installed and what has updates, then upgrade:
 ```text
 $ ins -l
 Installed packages
-Package               Version
-vlc [fake]            3.0.20
+╭──────────────────────────────┬──────────────────────────────╮
+│Package                       │Version                       │
+├──────────────────────────────┼──────────────────────────────┤
+│vlc [apt]                     │3.0.23-1                      │
+│vlc [snap]                    │3.0.20                        │
+╰──────────────────────────────┴──────────────────────────────╯
 
 $ ins -o
 Updates available
-Package               Installed  Available
-vlc [fake]            3.0.20     3.0.21
+╭──────────────────────────────┬──────────────┬──────────────╮
+│Package                       │Installed     │Available     │
+├──────────────────────────────┼──────────────┼──────────────┤
+│vlc [apt]                     │3.0.20        │3.0.23-1      │
+╰──────────────────────────────┴──────────────┴──────────────╯
 
 $ ins -U vlc -y
-upgraded vlc from fake
+✓ upgraded vlc from apt
 ```
 
 Preview before touching anything (works for `-i`, `-r`, `-u`, `-U`, with `--json`):
 
 ```text
 $ ins -i vlc --dry-run
-would install vlc from fake (24.3 MB)
+would install vlc from apt (35.3 KB)
 ```
 
 Provision a machine from a manifest:
@@ -176,15 +219,23 @@ $ ins bundle check manifest.toml    # drift report (exit 1 if out of date)
 $ ins bundle install manifest.toml  # install what's missing (prompts, -y to skip)
 ```
 
-Detail view per source:
+Detail view per source — license, homepage, and size in one glance:
 
 ```text
 $ ins info vlc
 vlc
-VLC media player - the portable version
-Source     Version    Size State         License Homepage
-[fake]     3.0.20  24.3 MB installed     GPL-2.0 https://example.org/apps/vlc
-[fake2]    3.0.20  24.3 MB not installed GPL-2.0 https://example.org/apps/vlc
+VLC is the VideoLAN project's media player. It plays MPEG, MPEG-2, MPEG-4,
+DivX, MOV, WMV, QuickTime, WebM, FLAC, MP3, Ogg/Vorbis files, DVDs, VCDs,
+podcasts, and multimedia streams from various network sources.
+sources
+╭────────────┬─────────────────────┬────────┬──────────────┬───────╮
+│Source      │Version              │   Size │State         │License│
+├────────────┼─────────────────────┼────────┼──────────────┼───────┤
+│[apt]       │3.0.23-1             │35.3 KB │not installed │—      │
+│[snap]      │3.0.20-1-g2617de71b6 │      — │not installed │—      │
+╰────────────┴─────────────────────┴────────┴──────────────┴───────╯
+homepages
+  [apt] https://www.videolan.org/vlc/
 ```
 
 Duplicate check + resolution:
@@ -192,12 +243,16 @@ Duplicate check + resolution:
 ```text
 $ ins doctor
 Duplicate installations
-Package Installed via  Versions
-vlc     [fake] [fake2] 3.0.20, 3.0.20
-sources: 2/10 detected (fake, fake2)
+╭──────────┬───────────────────┬──────────────╮
+│Package   │Installed via      │Versions      │
+├──────────┼───────────────────┼──────────────┤
+│vlc       │[apt] [snap]       │3.0.23-1      │
+│          │                   │3.0.20        │
+╰──────────┴───────────────────┴──────────────╯
+sources: 2/8 detected (apt, snap)
 cache: 4 entries, 0.03 MB (.../ins/cache.db)
 config: ~/.config/ins/config.toml
-Remove 'vlc' from fake2? [y/N]
+Remove 'vlc' from snap? [y/N]
 ```
 
 JSON for scripts:
@@ -209,10 +264,10 @@ $ ins -s vlc --json
   "results": [
     {
       "name": "vlc",
-      "source": "fake",
-      "version": "3.0.20",
+      "source": "apt",
+      "version": "3.0.23-1",
       "installed": true,
-      "also_via": ["fake2"],
+      "also_via": ["snap"],
       "alternatives": [ ... ]
     }
   ]
@@ -223,7 +278,7 @@ $ ins -s vlc --json
 
 | Command             | What it does                                        |
 | ------------------- | --------------------------------------------------- |
-| `ins`               | interactive type-to-filter search/install picker    |
+| `ins`               | show the full command list, grouped by category     |
 | `ins -s <q>`        | search all sources, merged + ranked                 |
 | `ins -i <pkg>...`   | install one or more packages (`-y` to skip prompt)  |
 | `ins -r <pkg>...`   | remove one or more packages                         |
@@ -239,7 +294,7 @@ $ ins -s vlc --json
 | `ins history [n]`   | show the last n install/remove/upgrade transactions (default 20) |
 | `ins undo`          | reverse the last install or remove transaction      |
 | `ins completions <bash\|zsh\|fish\|packages>` | print a completion script or package names |
-| `--s <source>`      | restrict any action to specific sources             |
+| `--s <source>...`  | restrict any action to specific sources             |
 | `--dry-run`         | preview install/remove/update/upgrade without changing anything |
 | `--json`            | machine-readable output (search, info, list, outdated, bundle check, doctor, update, dry-run, history) |
 | `-q / --quiet`      | suppress success messages and progress (errors still shown) |
@@ -259,13 +314,10 @@ $ ins -s vlc --json
 | nix      | `nix search nixpkgs` | `nix-env -iA/-e`      | `nix-channel --update` | — (resolved at run time) | `nix-env -u`         |
 | apk      | `apk search -d`   | `apk add/del`            | `apk update`    | `apk upgrade -s`       | `apk add -u`            |
 
-Sources are auto-detected by tool presence and skipped when absent. The demo
-sources `fake` / `fake2` (with `INS_FAKE=1`) power the test suite and let you
-try every command with zero system changes:
-
-```bash
-INS_FAKE=1 ins -s vlc
-```
+Sources are auto-detected by tool presence and skipped when absent, so the
+same command works on Ubuntu, Fedora, Arch, openSUSE, NixOS, and Alpine —
+`ins -s vlc` just shows you `[apt]` or `[dnf]` or `[pacman]` depending on the
+box. There is no demo mode: every source is a real package manager.
 
 ## Configuration
 
@@ -282,8 +334,12 @@ ttl_seconds = 3600
 max_entries = 5000
 
 [updaters]
-# built-in tool updaters to skip: pipx, uv, rustup, fwupd
-disable = ["fwupd"]
+# built-in tool updaters to skip: pipx, uv, rustup
+disable = []
+
+# opt-in privileged/network updaters (e.g. fwupd — its metadata refresh
+# can prompt for admin rights and downloads firmware metadata)
+enable = ["fwupd"]
 
 # extra update commands run by `ins -u` (name = argv list)
 custom = { texlive = ["tlmgr", "update", "--all"] }
@@ -294,7 +350,7 @@ custom = { texlive = ["tlmgr", "update", "--all"] }
 ```bash
 git clone https://github.com/savai15/ins && cd ins
 pip install -e ".[dev]"
-pytest -q        # 272 tests, all subprocess calls stubbed with real Linux output
+pytest -q        # 270 tests, all subprocess calls stubbed with real Linux output
 ruff check .     # lint (CI enforces both on Python 3.11/3.12/3.13)
 ```
 

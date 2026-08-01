@@ -77,10 +77,10 @@ the box:
   <img src="assets/ins-config.svg" alt="configuration: sources priority, cache TTL, updaters" width="700">
 </p>
 
-## Repos & activity
+## Activity
 
 <p align="center">
-  <img src="assets/ins-featured.svg" alt="featured repository: savai15/ins, Python, release v0.3.0, 270 tests, MIT license, contribution activity" width="700">
+  <img src="assets/ins-activity.svg" alt="commit activity over the last 48 weeks, handcrafted contribution graph in blood-red, release v0.3.0, 270 tests, MIT" width="700">
 </p>
 
 ## Development

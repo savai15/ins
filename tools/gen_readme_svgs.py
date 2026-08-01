@@ -508,64 +508,58 @@ def dev() -> str:
     return svg(W, H, defs, style, body)
 
 
-def featured() -> str:
-    W, H = 720, 320
+def activity() -> str:
+    W, H = 720, 300
     style = """
     @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes pop { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
-    @keyframes wave { 0% { transform: translateX(-80px); opacity: 0; } 15% { opacity: .5; } 100% { transform: translateX(720px); opacity: 0; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes wave { 0% { transform: translateX(-80px); opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { transform: translateX(720px); opacity: 0; } }
     .fade { opacity: 0; animation: fadein .5s ease-out forwards; }
-    .pop { animation: pop .6s ease-out .8s both; }
-    .sweep { animation: wave 3.2s ease-in-out 2.8s infinite; }
+    .chip { opacity: 0; animation: rise .5s ease-out forwards; }
+    .sweep { animation: wave 3.4s ease-in-out 3s infinite; }
     """
-    body = panel_header("08", "repos & activity", RED)
-    body += (f'<g class="pop"><rect x="24" y="64" width="420" height="118" rx="14" fill="{CARD}" stroke="{EDGE}" stroke-width="1.2"/>'
-             f'<rect x="40" y="80" width="34" height="34" rx="8" fill="url(#fg)"/>'
-             f'{path_text("ins", 40 + 5, 80 + 26, 20, BG)}</g>')
-    body += (f'<text x="84" y="94" font-family="{MONO}" font-size="15" fill="{FG}" font-weight="700" class="fade" style="animation-delay:1.2s">savai15/ins</text>'
-             f'<text x="84" y="112" font-family="{MONO}" font-size="12.5" fill="{META}" class="fade" style="animation-delay:1.35s">universal CLI package manager frontend</text>')
-    body += mono("Python", 40, 140, 12, BLUE, cls="fade", delay=1.5)
-    body += mono("100%", 40 + 5 * 7.2 + 8, 140, 12, DIM, cls="fade", delay=1.5)
-    body += (f'<rect x="40" y="148" width="210" height="6" rx="3" fill="#21262d">'
-             f'<animate attributeName="opacity" values="0;1" dur="0.3s" begin="1.6s" fill="freeze"/></rect>')
-    body += (f'<rect x="40" y="148" width="0" height="6" rx="3" fill="{BLUE}">'
-             f'<animate attributeName="opacity" values="0;1" dur="0.3s" begin="1.6s" fill="freeze"/>'
-             f'<animate attributeName="width" from="0" to="210" dur="1.2s" begin="1.8s" fill="freeze"/></rect>')
-    for i, (label, v) in enumerate([("release", "v0.3.0"), ("tests", "270"), ("license", "MIT")]):
-        x = 460 + (i % 2) * 122
-        yy = 80 + (i // 2) * 44
-        body += mono(label, x, yy + 6, 11, DIM, cls="fade", delay=1.6 + i * 0.15)
-        body += mono(v, x, yy + 24, 15, FG, bold=True, cls="fade", delay=1.6 + i * 0.15)
-    body += mono("contribution activity", 24, 200, 12, META, cls="fade", delay=2.2)
+    RAMP = [("#7c2a2a", 0.35), ("#7c2a2a", 1.0), ("#c93636", 1.0), ("#f85149", 1.0)]
     import random
     rng = random.Random(7)
-    grid: list[list[tuple[int, float]]] = []
+    grid: list[tuple[int, int, int]] = []
     for col in range(48):
         for row in range(7):
             level = rng.random()
-            if level > 0.78:
-                lvl, op = 2, 1.0
-            elif level > 0.55:
-                lvl, op = 1, 0.55
-            elif level > 0.4:
-                lvl, op = 0, 0.25
+            if level > 0.82:
+                lvl = 3
+            elif level > 0.62:
+                lvl = 2
+            elif level > 0.45:
+                lvl = 1
+            elif level > 0.34:
+                lvl = 0
             else:
                 continue
-            grid.append((col, row, lvl, op))
-    x0, y0, step = 24, 214, 12
-    for (col, row, lvl, op) in grid:
-        begin = 2.4 + col * 0.045
-        body += (f'<rect x="{x0 + col * step}" y="{y0 + row * step}" width="9" height="9" rx="2" '
-                 f'fill="{GREEN}" opacity="0">'
-                 f'<animate attributeName="opacity" from="0" to="{op}" dur="0.25s" begin="{begin:.2f}" fill="freeze"/></rect>')
-    body += ('<g class="sweep"><rect x="0" y="212" width="70" height="86" fill="url(#gs)" opacity="0.5"/></g>')
-    body += mono("last 48 weeks · handcrafted, like everything here", 24, 296, 12, DIM, cls="fade", delay=4.6)
-    defs = ('<linearGradient id="fg" x1="0" y1="0" x2="1" y2="1">'
-            f'<stop offset="0" stop-color="{BLUE}"/><stop offset="1" stop-color="{GREEN}"/></linearGradient>'
+            grid.append((col, row, lvl))
+    x0, y0, step = 40, 104, 11
+    cells = ""
+    for (col, row, lvl) in grid:
+        fill, op = RAMP[lvl]
+        begin = 2.4 + col * 0.05
+        cells += (f'<rect x="{x0 + col * step}" y="{y0 + row * step}" width="9" height="9" rx="2" '
+                  f'fill="{fill}" opacity="0">'
+                  f'<animate attributeName="opacity" from="0" to="{op}" dur="0.3s" begin="{begin:.2f}" fill="freeze"/></rect>')
+    body = panel_header("08", "activity", RED)
+    body += (f'<g class="fade" style="animation-delay:1.6s">'
+             f'<rect x="24" y="64" width="672" height="196" rx="14" fill="#0a0d12" stroke="#4f1d1d" stroke-width="1.5"/></g>')
+    body += mono("commit activity · last 48 weeks", 40, 88, 13, META, cls="fade", delay=1.9)
+    body += mono("release v0.3.0 · 270 tests · MIT", 448, 88, 12.5, DIM, cls="fade", delay=2.1)
+    body += cells
+    body += (f'<g clip-path="url(#gclip)"><g class="sweep">'
+             f'<rect x="0" y="{y0 - 4}" width="70" height="{6 * step + 9 + 8}" fill="url(#gs)" opacity="0.5"/>'
+             f'</g></g>')
+    body += mono("handcrafted, like everything here", 360, 222, 12, DIM, anchor="middle", cls="fade", delay=5.0)
+    body += mono("no stats servers · nothing to break", 360, 238, 12, DIM, anchor="middle", cls="fade", delay=5.2)
+    defs = (f'<clipPath id="gclip"><rect x="{x0}" y="{y0}" width="{47 * step + 9}" height="{6 * step + 9}"/></clipPath>'
             '<linearGradient id="gs" x1="0" y1="0" x2="1" y2="0">'
-            '<stop offset="0" stop-color="#ffffff" stop-opacity="0"/>'
-            '<stop offset="0.5" stop-color="#ffffff" stop-opacity="0.5"/>'
-            '<stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>')
+            '<stop offset="0" stop-color="#ff7b72" stop-opacity="0"/>'
+            '<stop offset="0.5" stop-color="#f85149" stop-opacity="0.6"/>'
+            '<stop offset="1" stop-color="#ff7b72" stop-opacity="0"/></linearGradient>')
     return svg(W, H, defs, style, body)
 
 
@@ -605,7 +599,7 @@ def main() -> None:
         "ins-sources-table.svg": sources_table,
         "ins-config.svg": config,
         "ins-dev.svg": dev,
-        "ins-featured.svg": featured,
+        "ins-activity.svg": activity,
         "ins-footer.svg": footer,
     }
     for name, builder in panels.items():

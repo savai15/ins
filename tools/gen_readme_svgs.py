@@ -106,7 +106,7 @@ def mono(text: str, x: float, y: float, size: float, fill: str = FG, bold: bool 
     cls = f' class="{cls}"' if cls else ""
     fw = ' font-weight="700"' if bold else ""
     style = f' style="animation-delay:{delay}s"' if delay is not None else ""
-    return (f'<text x="{x:.1f}" y="{y:.1f}" font-family="{MONO}" font-size="{size}"'
+    return (f'<text xml:space="preserve" x="{x:.1f}" y="{y:.1f}" font-family="{MONO}" font-size="{size}"'
             f' fill="{fill}"{fw}{cls}{style} text-anchor="{anchor}">{escape(text)}</text>')
 
 
@@ -194,7 +194,7 @@ def tagline() -> str:
 
 def features() -> str:
     FEATURES = [
-        ("8 managers · one interface", "apt dnf pacman zypper flatpak snap", "nix apk — merged & ranked", BLUE),
+        ("8 managers, 1 interface", "apt dnf pacman zypper flatpak snap", "nix apk — merged & ranked", BLUE),
         ("Typo-tolerant search", "\"vcl\" still finds vlc — transposition", "boost vs your real package lists", GREEN),
         ("Safe by default", "pkexec · sudo fallback · confirm with", "sizes · --dry-run previews · -y", ORANGE),
         ("doctor protects you", "duplicate detection that understands", "snap-transition stubs — never your app", RED),
@@ -230,17 +230,18 @@ def features() -> str:
 
 
 def install() -> str:
-    W, H = 720, 268
+    W, H = 720, 300
     cmds = [
-        ('curl -sSL https://raw.githubusercontent.com/savai15/ins/main/install.sh | bash', 1.1),
-        ('pipx install git+https://github.com/savai15/ins', 2.4),
-        ('pip install --user git+https://github.com/savai15/ins', 3.7),
+        ['curl -sSL https://raw.githubusercontent.com/savai15/ins/main/install.sh \\',
+         '  install.sh | bash'],
+        ['pipx install git+https://github.com/savai15/ins'],
+        ['pip install --user git+https://github.com/savai15/ins'],
     ]
     style = """
     @keyframes drop { 0% { transform: translateY(-70px); } 60% { transform: translateY(6px); } 80% { transform: translateY(-2px); } 100% { transform: translateY(0); } }
     @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
     .box { animation: drop .9s cubic-bezier(.2,.8,.3,1) .2s both; }
-    .note { opacity: 0; animation: fadein .5s ease-out 5.4s forwards; }
+    .note { opacity: 0; animation: fadein .5s ease-out 6.8s forwards; }
     """
     defs = ""
     body = panel_header("02", "install", GREEN)
@@ -253,14 +254,18 @@ def install() -> str:
             f'<stop offset="0" stop-color="{BLUE}"/><stop offset="1" stop-color="{GREEN}"/></linearGradient>')
     body += mono("Requires Python 3.11+ — any of these three:", 100, 96, 14, META)
     y = 130
-    for cmd, begin in cmds:
-        w = len(cmd) * 0.6 * 14
-        defs += typed_clip(f"i{int(begin)}", 100, y, w, begin)
-        body += mono("$ ", 100, y, 14, DIM)
-        body += f'<g clip-path="url(#i{int(begin)})">{mono(cmd, 100, y, 14, FG)}</g>'
-        body += cursor(100 + 15 + w + 4, y - 12, begin + 1.2)
-        y += 34
-    body += ('<text class="note" x="100" y="238" font-family="%s" font-size="13" fill="%s">'
+    for ci, lines in enumerate(cmds):
+        wlast = len(lines[-1]) * 0.6 * 14
+        for li, text in enumerate(lines):
+            begin = 1.1 + ci * 1.3 + li * 0.9
+            w = len(text) * 0.6 * 14
+            defs += typed_clip(f"i{ci}{li}", 116.8, y, w, begin)
+            body += mono("$ " if li == 0 else "  ", 100, y, 14, DIM)
+            body += f'<g clip-path="url(#i{ci}{li})">{mono(text, 116.8, y, 14, FG)}</g>'
+            if li == len(lines) - 1:
+                body += cursor(116.8 + wlast + 4, y - 12, begin + 1.2)
+            y += 34
+    body += ('<text class="note" xml:space="preserve" x="100" y="274" font-family="%s" font-size="13" fill="%s">'
              'optional inline icons: pipx inject ins term-image   ·   man ins</text>' % (MONO, DIM))
     return svg(W, H, defs, style, body)
 
@@ -281,15 +286,15 @@ def quickstart() -> str:
     body += dots + mono("ins — demo", 360, ty + 20, 12, DIM, anchor="middle")
     lines = []
     # scene 1: search
-    lines.append(("cmd", "$ ins -s vcl", 0.5, 1.1))
+    lines.append(("cmd", "ins -s vcl", 0.5, 1.1))
     lines.append(("out", "vlc [apt] 3.0.23-1", 1.8, GREEN))
     lines.append(("dim", "3 sources searched · 0.9s · 12 results", 2.3))
     # scene 2: install
-    lines.append(("cmd", "$ ins -i vlc -y", 2.9, 1.1))
-    lines.append(("bar", "installing vlc [apt] · 35.3 KB", 3.6, 6.2))
+    lines.append(("cmd", "ins -i vlc -y", 2.9, 1.1))
+    lines.append(("bar", "installing vlc [apt] · 35.3 KB", 3.6, 3.8))
     lines.append(("ok", "✓ installed vlc from apt", 5.6, GREEN))
     # scene 3: update
-    lines.append(("cmd", "$ ins -u", 6.6, 0.9))
+    lines.append(("cmd", "ins -u", 6.6, 0.9))
     lines.append(("dim", "apt: up to date", 7.8))
     lines.append(("dim", "snap: 2 update(s)   pipx: ran", 8.2))
     lines.append(("ok", "✓ 2 packages updated across snap", 9.0, GREEN))
@@ -299,28 +304,30 @@ def quickstart() -> str:
         if kind == "cmd":
             _, text, begin, dur = item
             w = len(text) * 0.6 * 14
-            defs += typed_clip(f"q{int(begin*10)}", 24, y, w, begin, dur)
+            defs += typed_clip(f"q{int(begin*10)}", 40.8, y, w, begin, dur)
             body += mono("$ ", 24, y, 14, DIM)
-            body += f'<g clip-path="url(#q{int(begin*10)})">{mono(text, 24, y, 14, FG)}</g>'
-            body += cursor(24 + 15 + w + 4, y - 12, begin + dur + 0.3)
+            body += f'<g clip-path="url(#q{int(begin*10)})">{mono(text, 40.8, y, 14, FG)}</g>'
+            body += cursor(40.8 + w + 4, y - 12, begin + dur + 0.3)
         elif kind == "out":
             _, text, begin, color = item
-            body += mono(text, 24, y, 14, color)
-            body += mono("  multimedia player and streamer", 24 + 0.6 * 14 * len(text), y, 14, DIM)
+            body += mono(text, 24, y, 14, color, cls="fade", delay=begin)
+            body += mono("  multimedia player and streamer", 24 + 0.6 * 14 * len(text), y, 14, DIM, cls="fade", delay=begin)
         elif kind == "dim":
             _, text, begin = item
-            body += mono(text, 24, y, 14, DIM)
+            body += mono(text, 24, y, 14, DIM, cls="fade", delay=begin)
         elif kind == "bar":
             _, text, begin, beginfill = item
-            body += mono(text, 24, y, 14, META)
-            body += f'<rect x="24" y="{y + 8}" width="300" height="8" rx="4" fill="#21262d"/>'
-            body += (f'<rect x="24" y="{y + 8}" width="0" height="8" rx="4" fill="url(#qb)">'
-                     f'<animate attributeName="width" from="0" to="300" dur="2.0s" begin="{beginfill}" fill="freeze"/></rect>')
+            body += mono(text, 24, y, 14, META, cls="fade", delay=begin)
+            body += (f'<rect x="24" y="{y + 8}" width="300" height="8" rx="4" fill="#21262d" opacity="0">'
+                     f'<animate attributeName="opacity" values="0;1" dur="0.2s" begin="{beginfill}" fill="freeze"/></rect>')
+            body += (f'<rect x="24" y="{y + 8}" width="0" height="8" rx="4" fill="url(#qb)" opacity="0">'
+                     f'<animate attributeName="opacity" values="0;1" dur="0.2s" begin="{beginfill}" fill="freeze"/>'
+                     f'<animate attributeName="width" from="0" to="300" dur="1.8s" begin="{beginfill}" fill="freeze"/></rect>')
         elif kind == "ok":
             _, text, begin, color = item
             body += (f'<g transform="translate(24,{y - 6})">'
                      f'{draw_path("M2 0 L6 5 L14 -5", color, 2.4, begin, length=20, dur=0.4)}</g>')
-            body += mono(text, 44, y, 14, color)
+            body += mono(text, 44, y, 14, color, cls="fade", delay=begin)
         y += 30
     defs += ('<linearGradient id="qb" x1="0" y1="0" x2="1" y2="0">'
              f'<stop offset="0" stop-color="{BLUE}"/><stop offset="1" stop-color="{GREEN}"/></linearGradient>')
@@ -330,7 +337,7 @@ def quickstart() -> str:
 def commands() -> str:
     W, H = 720, 460
     ROWS = [
-        ("ins -s <query>", "search all sources — merged, ranked, typo-tolerant"),
+        ("ins -s <query>", "search all sources — ranked, typo-tolerant"),
         ("ins -i <pkg>...", "install with confirmation + live progress"),
         ("ins -r <pkg>...", "remove installed packages"),
         ("ins -u", "update every source index + tool updaters"),
@@ -338,7 +345,7 @@ def commands() -> str:
         ("ins -o", "packages with newer versions available"),
         ("ins -U <pkg>...", "upgrade installed packages"),
         ("ins info <pkg>", "license · homepage · size per source"),
-        ("ins doctor", "duplicate installs — snap-stub aware, --dry-run safe"),
+        ("ins doctor", "duplicate installs · snap-stub aware"),
         ("ins history · undo", "review and reverse recent transactions"),
         ("ins export · bundle", "declarative provisioning manifests"),
         ("--dry-run · --json · -q", "preview · script · quiet"),
@@ -479,10 +486,10 @@ def dev() -> str:
     y = 66
     for i, (cmd, begin, dur) in enumerate(steps):
         w = len(cmd) * 0.6 * 14
-        defs += typed_clip(f"d{int(begin)}", 24, y, w, begin, dur)
+        defs += typed_clip(f"d{int(begin)}", 40.8, y, w, begin, dur)
         body += mono("$ ", 24, y, 14, DIM)
-        body += f'<g clip-path="url(#d{int(begin)})">{mono(cmd, 24, y, 14, FG)}</g>'
-        body += cursor(24 + 15 + w + 4, y - 12, begin + dur + 0.2)
+        body += f'<g clip-path="url(#d{int(begin)})">{mono(cmd, 40.8, y, 14, FG)}</g>'
+        body += cursor(40.8 + w + 4, y - 12, begin + dur + 0.2)
         if i == 1:
             body += (f'<rect x="24" y="{y + 10}" width="220" height="8" rx="4" fill="#21262d" opacity="0">'
                      f'<animate attributeName="opacity" values="0;1" dur="0.2s" begin="{begin + dur + 0.3}" fill="freeze"/></rect>')

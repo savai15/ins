@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 320" width="720" height="320">
+  <defs>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#58a6ff"/>
+      <stop offset="1" stop-color="#3fb950"/>
+    </linearGradient>
+    <clipPath id="t1">
+      <rect x="24" y="62" height="24">
+        <animate attributeName="width" from="0" to="84" dur="1.4s" begin="0.4s" fill="freeze"/>
+      </rect>
+    </clipPath>
+    <clipPath id="t2">
+      <rect x="24" y="168" height="24">
+        <animate attributeName="width" from="0" to="110" dur="1.4s" begin="3.8s" fill="freeze"/>
+      </rect>
+    </clipPath>
+  </defs>
+
+  <style>
+    .window { fill: #0d1117; stroke: #30363d; stroke-width: 1.5; }
+    .title { font: 13px "DejaVu Sans Mono", ui-monospace, monospace; fill: #8b949e; }
+    .divider { stroke: #30363d; stroke-width: 1; }
+    .prompt { font: 14px "DejaVu Sans Mono", ui-monospace, monospace; fill: #8b949e; }
+    .cmd { font: 14px "DejaVu Sans Mono", ui-monospace, monospace; fill: #e6edf3; }
+    .name { font: bold 14px "DejaVu Sans Mono", ui-monospace, monospace; fill: #e6edf3; }
+    .tag { font: 14px "DejaVu Sans Mono", ui-monospace, monospace; fill: #3fb950; }
+    .meta { font: 14px "DejaVu Sans Mono", ui-monospace, monospace; fill: #8b949e; }
+    .dim { font: 14px "DejaVu Sans Mono", ui-monospace, monospace; fill: #6e7681; }
+    .ok { font: 14px "DejaVu Sans Mono", ui-monospace, monospace; fill: #3fb950; }
+    .bar-bg { fill: #21262d; }
+    .bar-fill { fill: url(#bar); }
+    @keyframes f { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .f { opacity: 0; animation: f .3s ease-out forwards; }
+    .f1 { animation-delay: 2.4s; }
+    .f2 { animation-delay: 2.9s; }
+    .f3 { animation-delay: 5.8s; }
+    .f4 { animation-delay: 9.0s; }
+    .cursor { fill: #3fb950; }
+  </style>
+
+  <rect class="window" x="8" y="8" width="704" height="304" rx="14"/>
+  <circle cx="30" cy="26" r="6" fill="#ff5f56"/>
+  <circle cx="54" cy="26" r="6" fill="#ffbd2e"/>
+  <circle cx="78" cy="26" r="6" fill="#27c93f"/>
+  <text class="title" x="360" y="32" text-anchor="middle">ins — zsh</text>
+  <line class="divider" x1="16" y1="46" x2="704" y2="46"/>
+
+  <text class="prompt" x="24" y="78">$ </text>
+  <g clip-path="url(#t1)">
+    <text class="cmd" x="24" y="78">ins -s vcl</text>
+  </g>
+  <rect class="cursor" x="135" y="62" width="8" height="16" opacity="0">
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.5;0.58" dur="1.2s" begin="1.9s" repeatCount="indefinite"/>
+  </rect>
+
+  <g class="f f1">
+    <text class="name" x="24" y="112">vlc</text>
+    <text class="tag" x="58" y="112">[apt]</text>
+    <text class="meta" x="111" y="112">3.0.23-1</text>
+    <text class="dim" x="190" y="112">multimedia player and streamer</text>
+  </g>
+  <g class="f f2">
+    <text class="dim" x="24" y="146">3 sources searched · 0.9s · 12 results</text>
+  </g>
+
+  <text class="prompt" x="24" y="184">$ </text>
+  <g clip-path="url(#t2)">
+    <text class="cmd" x="24" y="184">ins -i vlc -y</text>
+  </g>
+  <rect class="cursor" x="160" y="168" width="8" height="16" opacity="0">
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.5;0.58" dur="1.2s" begin="5.4s" repeatCount="indefinite"/>
+  </rect>
+
+  <g class="f f3">
+    <text class="meta" x="24" y="220">installing vlc [apt] · 35.3 KB</text>
+    <rect class="bar-bg" x="24" y="232" width="420" height="10" rx="5"/>
+    <rect class="bar-fill" x="24" y="232" height="10" rx="5" width="0">
+      <animate attributeName="width" from="0" to="420" dur="2.4s" begin="6.2s" fill="freeze"/>
+    </rect>
+  </g>
+
+  <g class="f f4">
+    <text class="ok" x="24" y="288">✓ installed vlc from apt</text>
+  </g>
+</svg>

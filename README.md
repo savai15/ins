@@ -108,7 +108,7 @@ grouped command list (search & install / maintain / share / options):
 
 ```text
 $ ins
-ins — universal CLI package search/install tool for Linux
+'ins' — universal CLI package search/install tool for Linux
 
                      search & install
 ╭──────────────────┬──────────────────────────────────────────────╮

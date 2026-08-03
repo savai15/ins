@@ -1361,6 +1361,7 @@ _COMMAND_LIST = [
         [
             ("-y, --yes", "assume yes to all prompts (scripting)"),
             ("--dry-run", "show what would change without changing anything"),
+            ("-w, --web", "with -s: also search GitHub (top hit installable after confirmation)"),
             ("--json", "machine-readable output"),
             ("--source <src>...", "restrict the action to specific sources"),
             ("-q, --quiet", "suppress informational output"),

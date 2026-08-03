@@ -16,9 +16,8 @@ detection, and per-package detail views across every source on your system.
 - **Unified search** — parallel queries with typo tolerance
   (`ins -s vcl` still finds VLC), deduplicated and ranked by relevance +
   popularity.
-- **Paged results** — more than 20 matches? `ins` prints page 1 and asks
-  `show next page?`, or you can jump straight there with `--page N`
-  (`--per-page N` fits up to 20 per page). 20 results per page, never more.
+- **Concise results** — at most 20 results per search; if there are more,
+  `ins` notes it and suggests refining the query. No paging flags to learn.
 - **Web search fallback** — `ins -s <query> -w` also searches GitHub. The
   same table lists matching repositories (`name [web] ★stars`), and the top
   hit can be installed after its exact command is printed and confirmed:
@@ -172,9 +171,8 @@ $ ins -s vcl
 ╰───────────────────────────────────┴───────────────────────────────────────╯
 ```
 
-**More than 20 results?** Page through them — page 1 is printed by default
-and `ins` asks `show next page?` interactively; use `--page N` /
-`--per-page N` (max 20 per page) non-interactively.
+**More than 20 results?** `ins` shows the top 20 and tells you how many
+more match — refine your query to see the rest. No page flags to juggle.
 
 **Not in any local source?** Add `-w` to search GitHub too. The exact
 install command is printed and confirmed before it runs —
@@ -325,7 +323,6 @@ $ ins -s vlc --json
 | `ins`               | show the full command list, grouped by category     |
 | `ins -s <q>`        | search all sources, merged + ranked                 |
 | `ins -s <q> -w`     | also search GitHub — web-installed tools aren't tracked by `-l`/`-u`/`-U` |
-| `ins -s <q> --page 2` | page through more than 20 results (`--per-page N`, max 20/page) |
 | `ins -i <pkg>...`   | install one or more packages (`-y` to skip prompt)  |
 | `ins -r <pkg>...`   | remove one or more packages                         |
 | `ins -u`            | update every detected source's index + tool updaters  |

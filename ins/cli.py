@@ -34,8 +34,8 @@ from ins.search_engine import GroupedResult, NoSourcesError, SearchEngine, norma
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 ProgressCallback = Callable[[str], None]
 
-MAX_PAGE_SIZE = 20
-MAX_PAGE_WINDOW = 200  # how far ahead we rank locally so paging can slice
+MAX_RESULTS = 20   # how many results one search shows
+MAX_RANKED = 200   # how far ahead we rank locally so the "N more" note is accurate
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -120,16 +120,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="also search GitHub for repositories (with -s; web installs are not tracked by -l/-u)",
     )
     parser.add_argument(
-        "--page",
-        type=int, default=None, metavar="N", dest="page",
-        help="show page N of search results (default 1)",
-    )
-    parser.add_argument(
-        "--per-page", "--limit",
-        type=int, default=None, metavar="N", dest="per_page",
-        help=f"results per page (default {MAX_PAGE_SIZE}, max {MAX_PAGE_SIZE})",
-    )
-    parser.add_argument(
         "command", nargs="?", choices=("doctor", "info", "export", "bundle", "history", "undo", "completions"),
         help="doctor: scan for duplicate installs across sources; "
              "info <pkg>: detailed view of a package; "
@@ -141,7 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "subject", nargs="?",
-        metavar="PKG",
+        metavar="SUBJECT",
         help="package name for `ins info`; check/install for `ins bundle`; count for `ins history`; shell or `packages` for `ins completions`",
     )
     parser.add_argument(
@@ -291,7 +281,7 @@ def _search_results_json(
     query: str,
     *,
     page: int = 1,
-    per_page: int = MAX_PAGE_SIZE,
+    per_page: int = MAX_RESULTS,
     total: int | None = None,
     web_results: list[dict] | None = None,
 ) -> dict:
@@ -337,15 +327,10 @@ def _web_group(result: web.WebResult) -> GroupedResult:
     return GroupedResult(key=result.name.lower(), name=result.name, primary=info)
 
 
-def _page_params(args) -> tuple[int, int]:
-    per_page = max(1, min(args.per_page or MAX_PAGE_SIZE, MAX_PAGE_SIZE))
-    page = max(1, args.page or 1)
-    return page, per_page
-
-
-def _page_header(page: int, pages: int, per_page: int, total: int) -> str:
-    shown = min(total, page * per_page)
-    return f"[dim]page {page} of {pages} · showing {shown} of {total} results[/dim]"
+def _result_note(shown: int, total: int) -> str:
+    if total <= shown:
+        return ""
+    return f"[dim]showing {shown} of {total} results — refine your query to narrow it down[/dim]"
 
 
 def _run_web_command(plan: web.InstallPlan) -> None:
@@ -363,31 +348,30 @@ def _open_url(url: str) -> None:
 
 
 def _install_from_web(web_results: list[web.WebResult], config: Config, cache, args) -> int:
-    """Offer to install web results shown on the current page; returns exit code."""
+    """Offer to install the top GitHub hit; returns exit code."""
     if not web_results or args.json or args.dry_run or args.quiet:
         return 0
-    for result in web_results:
-        if not _confirm(f"Install '{result.name}' from web? [y/N] ", args):
-            _say(args, f"skipped {result.name}")
-            continue
-        plan = web.resolve_install(result, config.web)
-        if plan.command is None:
-            if _confirm(f"Open {plan.url}? [y/N] ", args):
-                _open_url(plan.url)
-            return 0
-        print(f"Plan: {plan.display}")
-        if not _confirm("Run this command? [y/N] ", args):
-            _say(args, f"skipped {result.name}")
-            return 0
-        try:
-            _run_action(args, lambda _cb, p=plan: _run_web_command(p), result.name)
-        except AdapterError as exc:
-            print(f"error: failed to install {result.name}: {exc}", file=sys.stderr)
-            return 1
-        if cache is not None:
-            cache.record("install", "web", result.name, "")
-        _ok(args, f"installed {result.name} (web)")
+    result = web_results[0]
+    if not _confirm(f"Install '{result.name}' from web? [y/N] ", args):
+        _say(args, f"skipped {result.name}")
         return 0
+    plan = web.resolve_install(result, config.web)
+    if plan.command is None:
+        if _confirm(f"Open {plan.url}? [y/N] ", args):
+            _open_url(plan.url)
+        return 0
+    print(f"Plan: {plan.display}")
+    if not _confirm("Run this command? [y/N] ", args):
+        _say(args, f"skipped {result.name}")
+        return 0
+    try:
+        _run_action(args, lambda _cb, p=plan: _run_web_command(p), result.name)
+    except AdapterError as exc:
+        print(f"error: failed to install {result.name}: {exc}", file=sys.stderr)
+        return 1
+    if cache is not None:
+        cache.record("install", "web", result.name, "")
+    _ok(args, f"installed {result.name} (web)")
     return 0
 
 
@@ -408,7 +392,6 @@ def cmd_search(args: argparse.Namespace) -> int:
         print("error: no package sources detected on this system", file=sys.stderr)
         return 1
 
-    page, per_page = _page_params(args)
     console = Console()
     statesource = ", ".join(a.name for a in adapters)
     local_all: list[GroupedResult] = []
@@ -416,7 +399,7 @@ def cmd_search(args: argparse.Namespace) -> int:
         engine = SearchEngine(adapters, cache=cache, ttl=config.cache.ttl_seconds)
         with console.status(f"[dim]searching '{query}' across {statesource}…[/dim]"):
             try:
-                local_all = engine.ranked(query, sources=[a.name for a in adapters], cap=MAX_PAGE_WINDOW)
+                local_all = engine.ranked(query, sources=[a.name for a in adapters], cap=MAX_RANKED)
             except NoSourcesError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 1
@@ -425,21 +408,18 @@ def cmd_search(args: argparse.Namespace) -> int:
     if use_web:
         with console.status(f"[dim]searching GitHub for '{query}'…[/dim]"):
             try:
-                web_page = web.search_github(query, settings=config.web, limit=per_page, page=page)
+                web_page = web.search_github(query, settings=config.web)
             except web.WebError as exc:
                 console.print(f"[dim]web search unavailable: {exc}[/dim]")
 
     web_results = list(web_page.results) if web_page else []
-    start = (page - 1) * per_page
-    page_local = local_all[start:start + per_page]
+    page_local = local_all[:MAX_RESULTS]
     shown = list(page_local) + [_web_group(r) for r in web_results]
     total = len(local_all) + (web_page.total if web_page else 0)
-    pages = max(1, (total + per_page - 1) // per_page) if total > 0 else 1
-    install_candidates = web_results  # offer installs for the first rendered page
 
     if not shown and not web_results:
         if args.json:
-            payload = _search_results_json([], query, page=page, per_page=per_page, total=0)
+            payload = _search_results_json([], query, total=0)
             print(json.dumps(payload, indent=2))
             return 0
         print(f"no results found for '{query}'")
@@ -456,40 +436,15 @@ def cmd_search(args: argparse.Namespace) -> int:
             }
             for r in web_results
         ]
-        payload = _search_results_json(
-            page_local, query, page=page, per_page=per_page, total=total, web_results=web_json,
-        )
+        payload = _search_results_json(page_local, query, total=total, web_results=web_json)
         print(json.dumps(payload, indent=2))
         return 0
 
-    if pages > 1:
-        console.print(_page_header(page, pages, per_page, total))
     render_search_results(console, query, shown)
-
-    browsing = not args.json and not args.quiet and not args.yes and pages > 1
-    if browsing:
-        current = page
-        while current < pages:
-            try:
-                console.print("[dim]show next page? [y/N][/dim]", end=" ")
-                answer = input("")
-            except (EOFError, OSError):
-                break
-            if answer.strip().lower() not in ("y", "yes"):
-                break
-            current += 1
-            start = (current - 1) * per_page
-            wr_new = []
-            if use_web:
-                try:
-                    wr_new = web.search_github(query, settings=config.web, limit=per_page, page=current).results
-                except web.WebError:
-                    wr_new = []
-            next_groups = local_all[start:start + per_page] + [_web_group(r) for r in wr_new]
-            console.print(_page_header(current, pages, per_page, total))
-            render_search_results(console, query, next_groups)
-        return 0  # browsing mode: no install prompts; re-run with -y to auto-install the top web hit
-    return _install_from_web(install_candidates, config, cache, args)
+    note = _result_note(len(shown), total)
+    if note:
+        console.print(note)
+    return _install_from_web(web_results, config, cache, args)
 
 
 def cmd_install(args: argparse.Namespace) -> int:
@@ -1508,8 +1463,8 @@ def dispatch(args: argparse.Namespace) -> int:
         return cmd_outdated(args)
     if "upgrade" in chosen:
         return cmd_upgrade(args)
-    if args.web or args.page is not None or args.per_page is not None:
-        print("error: --web/--page/--per-page require a search (-s QUERY)", file=sys.stderr)
+    if args.web:
+        print("error: --web requires a search (-s QUERY)", file=sys.stderr)
         return 2
     return cmd_help()
 

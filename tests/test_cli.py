@@ -737,7 +737,7 @@ def test_update_json(fake_env, capsys):
     assert payload["failed"] == []
 
 
-def _web_stub(monkeypatch, *names, error=None):
+def _web_stub(monkeypatch, *names, error=None, total=None):
     """Stub ins.web._http_get so CLI tests never touch the real network."""
     import json as _json
 
@@ -756,7 +756,7 @@ def _web_stub(monkeypatch, *names, error=None):
             }
             for n in names
         ]
-        return _json.dumps({"total_count": len(names), "items": items}).encode()
+        return _json.dumps({"total_count": len(names) if total is None else total, "items": items}).encode()
 
     monkeypatch.setattr(web, "_http_get", stub)
 
@@ -773,14 +773,7 @@ def test_web_flag_requires_search(fake_env, capsys):
     rc = cli.main(["-w"])
     err = capsys.readouterr().err
     assert rc == 2
-    assert "require a search" in err
-
-
-def test_paging_requires_search(fake_env, capsys):
-    rc = cli.main(["--page", "2"])
-    err = capsys.readouterr().err
-    assert rc == 2
-    assert "require a search" in err
+    assert "requires a search" in err
 
 
 def test_web_renders_github_repos(fake_env, capsys, monkeypatch):
@@ -897,64 +890,31 @@ def test_web_install_records_history(fake_env, capsys, monkeypatch):
     )
 
 
-# ---------------------------------------------------------------- paging
+# ---------------------------------------------------------------- result cap
 
 
-def test_paging_page_two_slices_local(fake_env, capsys):
-    import json as _json
-
-    rc = cli.main(["-s", "i", "--per-page", "2", "--page", "2", "--json"])
-    payload = _json.loads(capsys.readouterr().out)
-    assert rc == 0
-    assert payload["page"] == 2
-    assert payload["per_page"] == 2
-    assert payload["total"] == 9
-    assert [r["name"] for r in payload["results"]] == ["firefox", "neovim"]
-
-
-def test_paging_per_page_clamped_to_max(fake_env, capsys):
-    import json as _json
-
-    rc = cli.main(["-s", "i", "--per-page", "100", "--json"])
-    payload = _json.loads(capsys.readouterr().out)
-    assert rc == 0
-    assert payload["per_page"] == 20
-    assert len(payload["results"]) <= 20
-
-
-def test_paging_header_rendered(fake_env, capsys):
-    rc = cli.main(["-s", "i", "--per-page", "3"])
+def test_search_truncation_note_when_many_results(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, *[f"pkg{i}" for i in range(15)], total=40)
+    rc = cli.main(["-s", "i", "-w", "--dry-run"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "page 1 of 3" in out
-    assert "showing 3 of 9 results" in out
+    assert "showing 24 of 49 results" in out
+    assert "refine your query" in out
 
 
-def test_interactive_paging_next_page(fake_env, capsys, monkeypatch):
-    _inputs(monkeypatch, "y", "n")
-    rc = cli.main(["-s", "i", "--per-page", "2"])
+def test_search_no_truncation_note_within_budget(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, "opencode")
+    rc = cli.main(["-s", "i", "-w", "--dry-run"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "page 1 of 5" in out
-    assert "page 2 of 5" in out
+    assert "showing" not in out
 
 
-def test_browsing_pages_skips_install_prompts(fake_env, capsys, monkeypatch):
-    _web_stub(monkeypatch, "opencode", "freebuf", "another", "extra")
-    _inputs(monkeypatch, "n")  # decline next page
-    rc = cli.main(["-s", "i", "-w", "--per-page", "3"])
-    out = capsys.readouterr().out
-    assert rc == 0
-    assert "page 1 of" in out
-    assert "from web?" not in out  # no install nags while browsing
-    assert "Install '" not in out
-
-
-def test_browsing_auto_install_with_yes(fake_env, capsys, monkeypatch):
+def test_search_auto_installs_top_web_hit_with_yes(fake_env, capsys, monkeypatch):
     ran: list[str] = []
     _web_stub(monkeypatch, "opencode", "freebuf")
     monkeypatch.setattr(cli, "_run_web_command", lambda plan: ran.append(plan.display))
-    rc = cli.main(["-s", "i", "-w", "-y", "--per-page", "2"])
+    rc = cli.main(["-s", "i", "-w", "-y"])
     out = capsys.readouterr().out
     assert rc == 0
     assert ran == ["curl -fsSL https://opencode.ai/install | bash"]

@@ -256,7 +256,7 @@ def dev() -> str:
     body += mono("$ ", 24, 76, 14, DIM)
     body += f'<g clip-path="url(#v0)">{mono("git clone https://github.com/savai15/ins && cd ins", 40.8, 76, 14, FG)}</g>'
     body += mono("$ ", 24, 112, 14, DIM)
-    body += f'<g clip-path="url(#v1)">{mono("pip install -e \".[dev]\"", 40.8, 112, 14, FG)}</g>'
+    body += f'<g clip-path="url(#v1)">{mono("pip install -e .[dev]", 40.8, 112, 14, FG)}</g>'
     body += mono("$ ", 24, 148, 14, DIM)
     body += f'<g clip-path="url(#v2)">{mono("pytest -q", 40.8, 148, 14, FG)}</g>'
     body += progress_bar(24, 158, 220, "vb", 3.6, dur=1.4)

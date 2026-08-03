@@ -1041,7 +1041,11 @@ def cmd_export(args: argparse.Namespace, target: str | None) -> int:
     installed = _scan_installed(adapters)
     if target:
         path = Path(target)
-        path.write_text(manifest_dumps(installed), encoding="utf-8")
+        try:
+            path.write_text(manifest_dumps(installed), encoding="utf-8")
+        except OSError as exc:
+            print(f"error: could not write {path}: {exc.strerror or exc}", file=sys.stderr)
+            return 1
         print(f"exported {len(installed)} package(s) to {path}")
     else:
         print(manifest_dumps(installed))

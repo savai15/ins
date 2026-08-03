@@ -1,15 +1,39 @@
+<div align="center">
+
 # ins
 
-> One command to find, install, and remove software on Linux — no matter which
-> package manager your distro ships.
+**One command to find, install, and remove software on Linux — no matter which package manager your distro ships.**
 
-`ins` is a universal CLI that unifies **apt, dnf, pacman, zypper, flatpak, snap,
-nix, and apk** behind one simple, beautiful interface. Stop memorizing eight
-different commands; one tool does search, install, remove, update, duplicate
-detection, and per-package detail views across every source on your system.
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-270%20passing-brightgreen)
+![Lint](https://img.shields.io/badge/lint-ruff-orange)
+![Platforms](https://img.shields.io/badge/works%20on-apt%20%7C%20dnf%20%7C%20pacman%20%7C%20zypper%20%7C%20flatpak%20%7C%20snap%20%7C%20nix%20%7C%20apk-lightgrey)
+
+</div>
+
+<br>
+
+`ins` unifies **apt, dnf, pacman, zypper, flatpak, snap, nix, and apk** behind
+one simple, beautiful interface. Stop memorizing eight different commands —
+one tool does search, install, remove, update, duplicate detection, and
+per-package detail views across every source on your system.
+
+<p align="center">
+  <img src="assets/ins-demo.svg" alt="terminal demo: search vlc, install with live progress, update all sources" width="700">
+</p>
+
+<div align="center">
+
+[Install](#install) · [Quick start](#quick-start) · [Commands](#commands) · [Supported sources](#supported-sources) · [Configuration](#configuration) · [Development](#development)
+
+</div>
+
+---
 
 ## Features
 
+#### 🔎 Search
 - **One interface for 8 sources** — auto-detects what your distro has
   (apt-get, dnf, pacman, zypper, flatpak, snap, nix-env, apk), then merges
   results so the same app from multiple sources shows up once.
@@ -24,6 +48,8 @@ detection, and per-package detail views across every source on your system.
   curated recipes for known tools (opencode, uv, starship), then npm /
   pipx / cargo detection, then GitHub release assets (`.deb`, AppImage,
   binaries) — or just open the repo page. Never auto-runs untrusted scripts.
+
+#### 📦 Install & maintain
 - **Safe install/remove** — `pkexec` with a `sudo` fallback, live progress
   from the real package-manager output, confirm-before-install with sizes
   (`-y` skips prompts for scripting).
@@ -44,21 +70,27 @@ detection, and per-package detail views across every source on your system.
   admin rights and downloads firmware metadata.
 - **`ins -l` / `ins -o` / `ins -U <pkg>...`** — list installed packages,
   see which have newer versions available, and upgrade them individually.
+
+#### 🔄 Share & automate
 - **`ins export` / `ins bundle`** — declarative provisioning: dump what's
   installed to a TOML manifest, check drift, and reinstall it on a fresh box.
 - **`ins history` / `ins undo`** — every install/remove/upgrade is recorded;
   `ins undo` reverses the last one (removes what you installed, reinstalls
   what you removed), with a state check before acting.
-- **Quiet mode** — `-q` silences success messages (errors still print) and
-  `--no-progress` drops the live progress bar for pipelines.
-- **Offline-friendly** — local SQLite cache with TTL; stale results are marked
-  instead of failing when a source is unreachable.
 - **`--json`** — machine-readable output for scripting.
 - **Completions** — `ins completions bash|zsh|fish` prints a completion script,
   and package names auto-complete for `-i`/`-r`/`-U`/`info` via
   `ins completions packages [--installed] <prefix>`.
+
+#### ✨ Quality of life
+- **Quiet mode** — `-q` silences success messages (errors still print) and
+  `--no-progress` drops the live progress bar for pipelines.
+- **Offline-friendly** — local SQLite cache with TTL; stale results are marked
+  instead of failing when a source is unreachable.
 - **Pretty** — pastel-colored source tags, aligned tables, spinners, and an
   erase animation on remove.
+
+---
 
 ## Install
 
@@ -105,14 +137,12 @@ A man page ships with the package too:
 man ins
 ```
 
+---
+
 ## Quick start
 
 Every action takes an explicit flag or subcommand — bare `ins` prints the
 grouped command list (search & install / maintain / share / options):
-
-<p align="center">
-  <img src="assets/ins-demo.svg" alt="terminal demo: search vlc, install with live progress, update all sources" width="700">
-</p>
 
 ```text
 $ ins
@@ -316,6 +346,8 @@ $ ins -s vlc --json
 }
 ```
 
+---
+
 ## Commands
 
 | Command             | What it does                                        |
@@ -344,6 +376,8 @@ $ ins -s vlc --json
 | `--no-progress`     | run without the live progress bar                   |
 | `-y / --yes`        | assume yes (scripting)                              |
 
+---
+
 ## Supported sources
 
 | Source   | Search            | Install/Remove          | Update            | Outdated              | Upgrade                 |
@@ -361,6 +395,8 @@ Sources are auto-detected by tool presence and skipped when absent, so the
 same command works on Ubuntu, Fedora, Arch, openSUSE, NixOS, and Alpine —
 `ins -s vlc` just shows you `[apt]` or `[dnf]` or `[pacman]` depending on the
 box. There is no demo mode: every source is a real package manager.
+
+---
 
 ## Configuration
 
@@ -392,6 +428,8 @@ enable = ["fwupd"]
 custom = { texlive = ["tlmgr", "update", "--all"] }
 ```
 
+---
+
 ## Development
 
 <p align="center">
@@ -408,6 +446,8 @@ ruff check .     # lint (CI enforces both on Python 3.11/3.12/3.13)
 The test suite replays *real* captured package-manager output
 (`tests/output_samples.py`) through a fake subprocess layer, so parsing is
 verified against actual tool formats — no mocks of the system calls involved.
+
+---
 
 ## License
 

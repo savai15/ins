@@ -62,7 +62,8 @@ def test_install_already_installed(fake_env, capsys, tmp_path):
     assert "already installed" in out
 
 
-def test_install_not_found(fake_env, capsys):
+def test_install_not_found(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch)  # empty GitHub: no exact match, no network
     rc = cli.main(["-i", "zzz-not-here", "-y"])
     err = capsys.readouterr().err
     assert rc == 1
@@ -888,6 +889,62 @@ def test_web_install_records_history(fake_env, capsys, monkeypatch):
         r.get("action") == "install" and r.get("source") == "web" and r.get("package") == "opencode"
         for r in payload["history"]
     )
+
+
+# ---------------------------------------------------------------- install fallback
+
+
+def test_install_web_fallback_exact_name(fake_env, capsys, monkeypatch):
+    ran: list[str] = []
+    _web_stub(monkeypatch, "opencode", "freebuf")
+    monkeypatch.setattr(cli, "_run_web_command", lambda plan: ran.append(plan.display))
+    rc = cli.main(["-i", "opencode", "-y"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert ran == ["curl -fsSL https://opencode.ai/install | bash"]
+    assert "✓ installed opencode (web)" in out
+
+
+def test_install_web_fallback_owner_repo(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, "opencode")
+    monkeypatch.setattr(cli, "_run_web_command", lambda plan: None)
+    rc = cli.main(["-i", "owner/opencode", "-y"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "✓ installed opencode (web)" in out
+
+
+def test_install_web_fallback_no_match_keeps_error(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, "freebuf")  # GitHub has hits, but none match the name
+    rc = cli.main(["-i", "frobnicate", "-y"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "not found" in err
+
+
+def test_install_web_fallback_confirm_declined(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, "opencode")
+    _inputs(monkeypatch, "n")
+    rc = cli.main(["-i", "opencode"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "skipped opencode" in out
+
+
+def test_install_web_fallback_dry_run(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, "opencode")
+    rc = cli.main(["-i", "opencode", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "would install opencode from web" in out
+
+
+def test_install_web_fallback_offline(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, error="rate limited")
+    rc = cli.main(["-i", "opencode", "-y"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "not found" in err
 
 
 # ---------------------------------------------------------------- result cap

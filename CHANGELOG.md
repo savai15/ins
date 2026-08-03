@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-08-03
+
+### Added
+- **Web install fallback for `ins -i`** — when a name isn't found in any
+  local source, `ins` searches GitHub and, on an exact repo-name or
+  `owner/repo` match, offers to install it with the same confirm-first flow
+  (plan printed, re-confirmed, recorded in history as `web`). Works with
+  `-y` and `--dry-run`, and on systems with no detected package sources.
+
+### Changed
+- **Removed `--page` / `--per-page` / `--install-index`** — a search now
+  shows at most 20 results; when more match, `ins` prints
+  `showing N of M results — refine your query to narrow it down`. Web
+  installs are offered for the top hit only (was: paging + per-index install
+  flags). `-w` is listed in the bare `ins` help.
+
 ## [0.4.0] - 2026-08-03
 
 ### Added

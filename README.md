@@ -223,6 +223,11 @@ never auto-runs arbitrary remote scripts. `[web]` config (timeout, token)
 lives in `~/.config/ins/config.toml`; web-installed tools are not tracked
 by `-l`/`-u`/`-U`.
 
+**Install a GitHub tool directly** — `ins -i <name>` checks local sources
+first; if the name isn't there, it searches GitHub and offers to install on
+an exact repo-name or `owner/repo` match, with the same confirm-first flow
+(works with `-y` and `--dry-run`).
+
 Install (batch works too), with live progress:
 
 ```text
@@ -355,7 +360,7 @@ $ ins -s vlc --json
 | `ins`               | show the full command list, grouped by category     |
 | `ins -s <q>`        | search all sources, merged + ranked                 |
 | `ins -s <q> -w`     | also search GitHub — web-installed tools aren't tracked by `-l`/`-u`/`-U` |
-| `ins -i <pkg>...`   | install one or more packages (`-y` to skip prompt)  |
+| `ins -i <pkg>...`   | install one or more packages (`-y` to skip prompt; falls back to GitHub on exact repo match)  |
 | `ins -r <pkg>...`   | remove one or more packages                         |
 | `ins -u`            | update every detected source's index + tool updaters  |
 | `ins -l`            | list installed packages grouped by source          |

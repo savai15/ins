@@ -24,7 +24,10 @@ action takes an explicit flag or subcommand (see below).
 Search for packages across all sources, deduplicated and ranked.
 .TP
 .B ins -i, --install <pkg>...
-Install one or more packages with confirmation and live progress.
+Install one or more packages with confirmation and live progress. A name
+that isn't found in any local source falls back to GitHub: on an exact
+repo-name or \fBowner/repo\fR match, the same confirm-first web flow
+applies (plan printed, re-confirmed, recorded in history as \fBweb\fR).
 .TP
 .B ins -r, --remove <pkg>...
 Remove one or more installed packages.

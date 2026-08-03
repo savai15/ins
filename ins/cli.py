@@ -347,11 +347,8 @@ def _open_url(url: str) -> None:
         print(f"open in your browser: {url}")
 
 
-def _install_from_web(web_results: list[web.WebResult], config: Config, cache, args) -> int:
-    """Offer to install the top GitHub hit; returns exit code."""
-    if not web_results or args.json or args.dry_run or args.quiet:
-        return 0
-    result = web_results[0]
+def _web_install_flow(result: web.WebResult, config: Config, cache, args) -> int:
+    """Confirm and install one GitHub result; returns exit code."""
     if not _confirm(f"Install '{result.name}' from web? [y/N] ", args):
         _say(args, f"skipped {result.name}")
         return 0
@@ -373,6 +370,28 @@ def _install_from_web(web_results: list[web.WebResult], config: Config, cache, a
         cache.record("install", "web", result.name, "")
     _ok(args, f"installed {result.name} (web)")
     return 0
+
+
+def _install_from_web(web_results: list[web.WebResult], config: Config, cache, args) -> int:
+    """Offer to install the top GitHub hit; returns exit code."""
+    if not web_results or args.json or args.dry_run or args.quiet:
+        return 0
+    return _web_install_flow(web_results[0], config, cache, args)
+
+
+def _web_fallback(name: str, config: Config) -> web.WebResult | None:
+    """Find the exact GitHub repo for `name` (repo name or owner/name), or None."""
+    if not config.web.enabled:
+        return None
+    try:
+        page = web.search_github(name, settings=config.web)
+    except web.WebError:
+        return None
+    key = normalize_key(name)
+    for result in page.results:
+        if normalize_key(result.name) == key or normalize_key(result.repo) == key:
+            return result
+    return None
 
 
 def cmd_search(args: argparse.Namespace) -> int:
@@ -456,7 +475,7 @@ def cmd_install(args: argparse.Namespace) -> int:
     if errors:
         print(f"error: {'; '.join(errors)}", file=sys.stderr)
         return 2
-    if not adapters:
+    if not adapters and not config.web.enabled:
         print("error: no package sources detected on this system", file=sys.stderr)
         return 1
     engine = SearchEngine(adapters, cache=cache, ttl=config.cache.ttl_seconds)
@@ -473,6 +492,24 @@ def cmd_install(args: argparse.Namespace) -> int:
         if target is None and results:
             target = results[0]
         if target is None:
+            web_result = _web_fallback(name, config)
+            if web_result is not None:
+                if args.dry_run:
+                    if args.json:
+                        preview_rows.append(
+                            {
+                                "name": web_result.name,
+                                "source": "web",
+                                "version": "",
+                                "size": None,
+                                "installed": False,
+                            }
+                        )
+                    else:
+                        preview_lines.append(f"would install {web_result.name} from web")
+                    continue
+                rc |= _web_install_flow(web_result, config, cache, args)
+                continue
             print(f"error: '{name}' not found in any source", file=sys.stderr)
             rc = 1
             continue

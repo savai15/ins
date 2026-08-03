@@ -937,3 +937,25 @@ def test_interactive_paging_next_page(fake_env, capsys, monkeypatch):
     assert rc == 0
     assert "page 1 of 5" in out
     assert "page 2 of 5" in out
+
+
+def test_browsing_pages_skips_install_prompts(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, "opencode", "freebuf", "another", "extra")
+    _inputs(monkeypatch, "n")  # decline next page
+    rc = cli.main(["-s", "i", "-w", "--per-page", "3"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "page 1 of" in out
+    assert "from web?" not in out  # no install nags while browsing
+    assert "Install '" not in out
+
+
+def test_browsing_auto_install_with_yes(fake_env, capsys, monkeypatch):
+    ran: list[str] = []
+    _web_stub(monkeypatch, "opencode", "freebuf")
+    monkeypatch.setattr(cli, "_run_web_command", lambda plan: ran.append(plan.display))
+    rc = cli.main(["-s", "i", "-w", "-y", "--per-page", "2"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert ran == ["curl -fsSL https://opencode.ai/install | bash"]
+    assert "✓ installed opencode (web)" in out

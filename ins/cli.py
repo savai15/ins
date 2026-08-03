@@ -466,11 +466,13 @@ def cmd_search(args: argparse.Namespace) -> int:
         console.print(_page_header(page, pages, per_page, total))
     render_search_results(console, query, shown)
 
-    if not args.json and not args.quiet and not args.yes and pages > 1:
+    browsing = not args.json and not args.quiet and not args.yes and pages > 1
+    if browsing:
         current = page
         while current < pages:
             try:
-                answer = input("[dim]show next page? [y/N] [/dim]")
+                console.print("[dim]show next page? [y/N][/dim]", end=" ")
+                answer = input("")
             except (EOFError, OSError):
                 break
             if answer.strip().lower() not in ("y", "yes"):
@@ -486,6 +488,7 @@ def cmd_search(args: argparse.Namespace) -> int:
             next_groups = local_all[start:start + per_page] + [_web_group(r) for r in wr_new]
             console.print(_page_header(current, pages, per_page, total))
             render_search_results(console, query, next_groups)
+        return 0  # browsing mode: no install prompts; re-run with -y to auto-install the top web hit
     return _install_from_web(install_candidates, config, cache, args)
 
 

@@ -299,6 +299,19 @@ def test_export_prints_to_stdout(fake_env, capsys, tmp_path):
     assert 'vlc = "3.0.20"' in out
 
 
+def test_export_unwritable_target_fails_cleanly(fake_env, capsys, tmp_path):
+    cli.main(["-i", "vlc", "-y"])
+    capsys.readouterr()
+
+    target = tmp_path / "no-such-dir" / "manifest.toml"
+    rc = cli.main(["export", str(target)])
+    err = capsys.readouterr().err
+
+    assert rc == 1
+    assert "could not write" in err
+    assert not target.exists()
+
+
 def test_bundle_check_up_to_date(fake_env, capsys, tmp_path):
     cli.main(["-i", "vlc", "-y"])
     capsys.readouterr()

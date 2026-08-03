@@ -44,6 +44,21 @@ class UpdaterSettings:
 
 
 @dataclass(slots=True)
+class WebSettings:
+    """Web search fallback (`ins -s <q> -w`): GitHub repository search.
+
+    Off by default at the CLI level — it only ever runs when `-w` is given.
+    `enabled = false` makes the web source unavailable entirely. The token
+    (or the `GITHUB_TOKEN` env var) raises GitHub's anonymous rate limit of
+    10 requests/minute to 60/hour.
+    """
+
+    enabled: bool = True
+    timeout_seconds: int = 10
+    token: str = ""
+
+
+@dataclass(slots=True)
 class Config:
     """User configuration with sensible defaults.
 
@@ -61,11 +76,17 @@ class Config:
         disable = ["fwupd"]
         enable = ["fwupd"]   # opt-in for privileged/network updaters
         custom = { texlive = ["tlmgr", "update", "--all"] }
+
+        [web]
+        enabled = true
+        timeout_seconds = 10
+        token = ""           # or set GITHUB_TOKEN
     """
 
     source_priority: list[str] = field(default_factory=lambda: list(DEFAULT_SOURCE_PRIORITY))
     cache: CacheSettings = field(default_factory=CacheSettings)
     updaters: UpdaterSettings = field(default_factory=UpdaterSettings)
+    web: WebSettings = field(default_factory=WebSettings)
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:
@@ -85,6 +106,7 @@ class Config:
         sources = data.get("sources", {})
         cache = data.get("cache", {})
         updaters = data.get("updaters", {})
+        web = data.get("web", {})
         priority = sources.get("priority")
         cfg = cls()
         if isinstance(priority, list) and priority:
@@ -108,6 +130,13 @@ class Config:
                 for name, command in custom.items():
                     if isinstance(command, list) and command:
                         cfg.updaters.custom[str(name)] = [str(part) for part in command]
+        if isinstance(web, dict):
+            if "enabled" in web:
+                cfg.web.enabled = bool(web["enabled"])
+            if "timeout_seconds" in web:
+                cfg.web.timeout_seconds = int(web["timeout_seconds"])
+            if "token" in web:
+                cfg.web.token = str(web["token"])
         return cfg
 
     def to_dict(self) -> dict:
@@ -119,6 +148,7 @@ class Config:
                 "enable": self.updaters.enable,
                 "custom": self.updaters.custom,
             },
+            "web": asdict(self.web),
         }
 
     def save(self, path: Path | None = None) -> None:

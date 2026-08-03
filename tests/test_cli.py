@@ -735,3 +735,205 @@ def test_update_json(fake_env, capsys):
     assert payload["sources"] == {"fake": 3, "fake2": 3}
     assert payload["updaters"] == {}
     assert payload["failed"] == []
+
+
+def _web_stub(monkeypatch, *names, error=None):
+    """Stub ins.web._http_get so CLI tests never touch the real network."""
+    import json as _json
+
+    from ins import web
+
+    def stub(url, *, timeout, token=""):
+        if error:
+            raise web.WebError(error)
+        items = [
+            {
+                "full_name": f"owner/{n}",
+                "name": n,
+                "description": f"{n} description",
+                "html_url": f"https://github.com/owner/{n}",
+                "stargazers_count": 42,
+            }
+            for n in names
+        ]
+        return _json.dumps({"total_count": len(names), "items": items}).encode()
+
+    monkeypatch.setattr(web, "_http_get", stub)
+
+
+def _inputs(monkeypatch, *answers):
+    it = iter(answers)
+    monkeypatch.setattr("builtins.input", lambda *a: next(it))
+
+
+# ---------------------------------------------------------------- web search
+
+
+def test_web_flag_requires_search(fake_env, capsys):
+    rc = cli.main(["-w"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "require a search" in err
+
+
+def test_paging_requires_search(fake_env, capsys):
+    rc = cli.main(["--page", "2"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "require a search" in err
+
+
+def test_web_renders_github_repos(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, "opencode", "freebuf")
+    rc = cli.main(["-s", "opencode", "-w", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "opencode [web]" in out
+    assert "freebuf [web]" in out
+    assert "opencode description" in out
+
+
+def test_web_json_shape(fake_env, capsys, monkeypatch):
+    import json as _json
+
+    _web_stub(monkeypatch, "opencode")
+    rc = cli.main(["-s", "opencode", "-w", "--json", "--source", "web"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["web"] == [
+        {
+            "name": "opencode",
+            "repo": "owner/opencode",
+            "url": "https://github.com/owner/opencode",
+            "description": "opencode description",
+            "stars": 42,
+        }
+    ]
+    assert payload["page"] == 1
+    assert payload["per_page"] == 20
+    assert payload["total"] == 1
+
+
+def test_web_only_source_needs_no_local_adapters(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, "opencode")
+    rc = cli.main(["-s", "opencode", "-w", "--source", "web", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "no package sources detected" not in out
+    assert "opencode [web]" in out
+
+
+def test_web_disabled_in_config(fake_env, capsys, monkeypatch):
+    from ins.config import Config
+
+    cfg = Config()
+    cfg.web.enabled = False
+    monkeypatch.setattr(cli.Config, "load", lambda *a, **kw: cfg)
+    rc = cli.main(["-s", "vlc", "-w"])
+    err = capsys.readouterr().err
+    assert rc == 0
+    assert "web search is disabled" in err
+
+
+def test_web_network_error_degrades_to_local(fake_env, capsys, monkeypatch):
+    _web_stub(monkeypatch, error="rate limited")
+    rc = cli.main(["-s", "vlc", "-w"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "web search unavailable" in out
+    assert "vlc [fake]" in out  # local results still shown
+
+
+# ---------------------------------------------------------------- web install
+
+
+def test_web_install_with_yes_runs_recipe(fake_env, capsys, monkeypatch):
+    ran: list[str] = []
+    _web_stub(monkeypatch, "opencode")
+
+    def fake_run(plan):
+        ran.append(plan.display)
+
+    monkeypatch.setattr(cli, "_run_web_command", fake_run)
+    rc = cli.main(["-s", "opencode", "-w", "-y", "--source", "web"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert ran == ["curl -fsSL https://opencode.ai/install | bash"]
+    assert "✓ installed opencode (web)" in out
+
+
+def test_web_install_run_requires_second_confirm(fake_env, capsys, monkeypatch):
+    ran: list[str] = []
+    _web_stub(monkeypatch, "opencode")
+
+    def fake_run(plan):
+        ran.append(plan.display)
+
+    monkeypatch.setattr(cli, "_run_web_command", fake_run)
+    _inputs(monkeypatch, "y", "n")  # install yes, then decline the run
+    rc = cli.main(["-s", "opencode", "-w", "--source", "web"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "Plan: curl -fsSL https://opencode.ai/install | bash" in out
+    assert "skipped opencode" in out
+    assert ran == []  # never executed
+
+
+def test_web_install_records_history(fake_env, capsys, monkeypatch):
+    import json as _json
+
+    _web_stub(monkeypatch, "opencode")
+    monkeypatch.setattr(cli, "_run_web_command", lambda plan: None)
+    rc = cli.main(["-s", "opencode", "-w", "-y", "--source", "web"])
+    capsys.readouterr()
+    assert rc == 0
+
+    rc = cli.main(["history", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert any(
+        r.get("action") == "install" and r.get("source") == "web" and r.get("package") == "opencode"
+        for r in payload["history"]
+    )
+
+
+# ---------------------------------------------------------------- paging
+
+
+def test_paging_page_two_slices_local(fake_env, capsys):
+    import json as _json
+
+    rc = cli.main(["-s", "i", "--per-page", "2", "--page", "2", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["page"] == 2
+    assert payload["per_page"] == 2
+    assert payload["total"] == 9
+    assert [r["name"] for r in payload["results"]] == ["firefox", "neovim"]
+
+
+def test_paging_per_page_clamped_to_max(fake_env, capsys):
+    import json as _json
+
+    rc = cli.main(["-s", "i", "--per-page", "100", "--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["per_page"] == 20
+    assert len(payload["results"]) <= 20
+
+
+def test_paging_header_rendered(fake_env, capsys):
+    rc = cli.main(["-s", "i", "--per-page", "3"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "page 1 of 3" in out
+    assert "showing 3 of 9 results" in out
+
+
+def test_interactive_paging_next_page(fake_env, capsys, monkeypatch):
+    _inputs(monkeypatch, "y", "n")
+    rc = cli.main(["-s", "i", "--per-page", "2"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "page 1 of 5" in out
+    assert "page 2 of 5" in out

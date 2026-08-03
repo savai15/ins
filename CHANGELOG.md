@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-03
+
+### Added
+- **Web search fallback (`-w`)** — `ins -s <q> -w` also searches GitHub, in
+  the same merged results table under a `web` source tag. The install command
+  is always printed and re-confirmed before it runs. Resolution order:
+  curated recipes (opencode, uv, starship) → npm / PyPI (pipx) / crates.io
+  presence checks → GitHub latest-release assets (`.deb`, AppImage, direct
+  binaries to `~/.local/bin`) → fall back to opening the repo page. A short
+  `[web]` config section (enable/timeout/token, or `GITHUB_TOKEN`) is read
+  from `~/.config/ins/config.toml`. Web installs appear in `history`.
+- **Paged search (`--page` / `--per-page`)** — 20 results max per page;
+  page 1 prints a header (`page 1 of 5 · showing 3 of 9 results`) and asks
+  `show next page?` interactively when more exist. Works for local and web
+  searches. Search JSON now carries `page`, `per_page`, `total`, and `web[]`.
+- `--source web` — restrict a search to GitHub only.
+- New tests: `tests/test_web.py` (mocked HTTP) plus CLI paging/web coverage.
+
+### Fixed
+- **`ins export <path>` no longer tracebacks** — writing to an unwritable or
+  missing directory now fails cleanly with `error: could not write <path>`
+  and exit code 1 (was an unhandled `FileNotFoundError` stack dump).
+
 ## [0.3.1] - 2026-08-03
 
 ### Fixed

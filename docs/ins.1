@@ -76,7 +76,22 @@ Print a completion script, or package names for dynamic completion
 .SH OPTIONS
 .TP
 .B --s, --source <source>...
-Restrict the action to specific sources (e.g. apt, flatpak, snap).
+Restrict the action to specific sources (e.g. apt, flatpak, snap; \fBweb\fR
+means GitHub only and pairs with \fB-w\fR).
+.TP
+.B -w, --web
+Search GitHub as well as local package sources. Matching repositories are
+listed in the same table; the top hit can be installed after a printed,
+explicitly confirmed install command. Web installs resolve from a curated
+recipe table, npm / pipx / cargo presence, or GitHub release assets,
+falling back to opening the repository page. Aggressive remote scripts are
+never auto-run. Web-installed tools are not tracked by -l, -u, or -U, and
+appear in history with source \fBweb\fR.
+.TP
+.B --page <n>, --per-page <n>
+Page through search results instead of the single default screen. A page
+holds up to 20 results (\fI--per-page\fR is clamped to 20); without these
+flags, ins prompts for the next page when more results exist.
 .TP
 .B -y, --yes
 Assume yes to all prompts (for scripting).

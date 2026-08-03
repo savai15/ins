@@ -28,7 +28,14 @@ def test_search_json_no_results(fake_env, capsys):
     rc = cli.main(["-s", "zzz-not-here", "--json"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert json.loads(out) == {"query": "zzz-not-here", "results": []}
+    assert json.loads(out) == {
+        "query": "zzz-not-here",
+        "results": [],
+        "web": [],
+        "page": 1,
+        "per_page": 20,
+        "total": 0,
+    }
 
 
 def test_search_json_shows_installed_state(fake_env, capsys):

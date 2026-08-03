@@ -15,7 +15,16 @@ detection, and per-package detail views across every source on your system.
   results so the same app from multiple sources shows up once.
 - **Unified search** — parallel queries with typo tolerance
   (`ins -s vcl` still finds VLC), deduplicated and ranked by relevance +
-  popularity, capped at 20 results.
+  popularity.
+- **Paged results** — more than 20 matches? `ins` prints page 1 and asks
+  `show next page?`, or you can jump straight there with `--page N`
+  (`--per-page N` fits up to 20 per page). 20 results per page, never more.
+- **Web search fallback** — `ins -s <query> -w` also searches GitHub. The
+  same table lists matching repositories (`name [web] ★stars`), and the top
+  hit can be installed after its exact command is printed and confirmed:
+  curated recipes for known tools (opencode, uv, starship), then npm /
+  pipx / cargo detection, then GitHub release assets (`.deb`, AppImage,
+  binaries) — or just open the repo page. Never auto-runs untrusted scripts.
 - **Safe install/remove** — `pkexec` with a `sudo` fallback, live progress
   from the real package-manager output, confirm-before-install with sizes
   (`-y` skips prompts for scripting).
@@ -163,6 +172,29 @@ $ ins -s vcl
 ╰───────────────────────────────────┴───────────────────────────────────────╯
 ```
 
+**More than 20 results?** Page through them — page 1 is printed by default
+and `ins` asks `show next page?` interactively; use `--page N` /
+`--per-page N` (max 20 per page) non-interactively.
+
+**Not in any local source?** Add `-w` to search GitHub too. The exact
+install command is printed and confirmed before it runs —
+
+```text
+$ ins -s opencode -w
+opencode [web] ★ 218k          opencode is the AI coding agent…
+$ # asked: Install 'opencode' from web? → y
+Plan: curl -fsSL https://opencode.ai/install | bash
+Run this command? [y/N] y
+✓ installed opencode (web)
+```
+
+Web installs are resolved from a curated recipe table, then npm / pipx /
+cargo presence, then GitHub release assets (`.deb`/AppImage/binary). If
+nothing verifiable is found `ins` just offers to open the repo page — it
+never auto-runs arbitrary remote scripts. `[web]` config (timeout, token)
+lives in `~/.config/ins/config.toml`; web-installed tools are not tracked
+by `-l`/`-u`/`-U`.
+
 Install (batch works too), with live progress:
 
 ```text
@@ -292,6 +324,8 @@ $ ins -s vlc --json
 | ------------------- | --------------------------------------------------- |
 | `ins`               | show the full command list, grouped by category     |
 | `ins -s <q>`        | search all sources, merged + ranked                 |
+| `ins -s <q> -w`     | also search GitHub — web-installed tools aren't tracked by `-l`/`-u`/`-U` |
+| `ins -s <q> --page 2` | page through more than 20 results (`--per-page N`, max 20/page) |
 | `ins -i <pkg>...`   | install one or more packages (`-y` to skip prompt)  |
 | `ins -r <pkg>...`   | remove one or more packages                         |
 | `ins -u`            | update every detected source's index + tool updaters  |
@@ -306,7 +340,7 @@ $ ins -s vlc --json
 | `ins history [n]`   | show the last n install/remove/upgrade transactions (default 20) |
 | `ins undo`          | reverse the last install or remove transaction      |
 | `ins completions <bash\|zsh\|fish\|packages>` | print a completion script or package names |
-| `--s <source>...`  | restrict any action to specific sources             |
+| `--s <source>...`  | restrict any action to specific sources (`web` = only GitHub) |
 | `--dry-run`         | preview install/remove/update/upgrade without changing anything |
 | `--json`            | machine-readable output (search, info, list, outdated, bundle check, doctor, update, dry-run, history) |
 | `-q / --quiet`      | suppress success messages and progress (errors still shown) |

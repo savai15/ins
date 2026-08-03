@@ -95,6 +95,21 @@ class SearchEngine:
     # ------------------------------------------------------------- searching
 
     def search(self, query: str, *, sources: list[str] | None = None) -> list[GroupedResult]:
+        """Top-`cap` results in ranked order (the default one-screen view)."""
+        return self.ranked(query, sources=sources, cap=self._cap)
+
+    def ranked(
+        self,
+        query: str,
+        *,
+        sources: list[str] | None = None,
+        cap: int | None = None,
+    ) -> list[GroupedResult]:
+        """Rank all candidates and return the top `cap` (default: configured cap).
+
+        `cap` raises the pagination window; callers that page display slice
+        this list themselves.
+        """
         query = query.strip()
         if not query or not normalize_key(query):
             raise ValueError("search query must not be empty")
@@ -102,7 +117,9 @@ class SearchEngine:
         if not adapters:
             raise NoSourcesError("no package sources to search")
 
-        per_source_limit = max(50, self._cap * 2)
+        score_cap = max(self._cap, self._cap if cap is None else cap)
+        score_cap = min(score_cap, 500)
+        per_source_limit = max(50, score_cap * 2)
         collected: dict[str, tuple[list[AppInfo], bool]] = {}
         with ThreadPoolExecutor(max_workers=len(adapters)) as pool:
             futures = {
@@ -122,7 +139,7 @@ class SearchEngine:
         self._score(groups, query)
         scored = [g for g in groups if g.score >= MIN_SCORE]
         scored.sort(key=lambda g: g.score, reverse=True)
-        return scored[: self._cap]
+        return scored[:score_cap]
 
     def _search_source(self, adapter: SourceAdapter, query: str, limit: int) -> tuple[list[AppInfo], bool]:
         if self._cache is not None:
